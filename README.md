@@ -249,6 +249,10 @@ just that feature off, logged once, instead of failing a library scan. There is 
   `{"paths": [...], "source": "jellyfin"}`, at most 1,000 paths a request.
 - The first time it watches a library folder it walks it once to note what is there, and
   sends nothing for it.
+- It sees what Jellyfin reports. A subtitle Jellyfin adds, or one it finds gone or new on
+  a scan or refresh, changes the item; a file replaced under the same name, with the item's
+  subtitle list unchanged, raises no item update until the item is next refreshed (a
+  library scan, or **Refresh metadata** on it).
 - quipclipper down or failing: what waits is kept (up to 10,000 files) and retried after
   30 s, doubling up to 10 minutes. A 401 or 403 (revoked key) stops it until the server
   connects again; the plugin page says so.
