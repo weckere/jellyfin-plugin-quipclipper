@@ -69,7 +69,7 @@ gets results: Jellyfin's automatic downloads never do, and nothing starts a tran
 - **Clip metadata:** any quipclipper that writes clip sidecars (0.2 or later), and a Jellyfin
   library on its clips folder.
 - **Re-index and transcripts:** a quipclipper with scoped client tokens and Jellyfin paths
-  (`"source": "jellyfin"`): the release after 0.4.1, or its `dev` branch until then. An older
+  (`"source": "jellyfin"`): **quipclipper 0.5.0 or later**. An older
   quipclipper refuses to pair ("has no scoped tokens"). Jellyfin must be able to reach
   quipclipper over HTTP.
 
