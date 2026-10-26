@@ -31,6 +31,12 @@ internal sealed class FakeQuipclipper : HttpMessageHandler
 
     public List<string[]> Queued { get; } = [];
 
+    /// <summary>The stored transcripts GET /api/items/transcript serves, by Jellyfin path.</summary>
+    public Dictionary<string, FakeTranscript> Transcripts { get; } = [];
+
+    /// <summary>Each transcript request's query, parsed.</summary>
+    public List<Dictionary<string, string>> TranscriptQueries { get; } = [];
+
     public QuipclipperClient Client() => new(new HttpClient(this, disposeHandler: false), TimeSpan.FromSeconds(5));
 
     public void Approve(string id) => Pairs[id] = (Pairs[id].Secret, "approved");
@@ -99,6 +105,41 @@ internal sealed class FakeQuipclipper : HttpMessageHandler
                     return Json(answer, new { detail = answer == HttpStatusCode.Accepted ? null : "Nothing to re-index.", queued = paths.Length });
                 }
 
+            case ("GET", "/api/items/transcript"):
+                if (key != Token || Revoked)
+                {
+                    return Json(HttpStatusCode.Unauthorized, new { detail = "revoked" });
+                }
+
+                var q = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
+                var query = q.AllKeys.Where(k => k is not null).ToDictionary(k => k!, k => q[k]!);
+                TranscriptQueries.Add(query);
+                if (query.GetValueOrDefault("source") != "jellyfin" || !Transcripts.TryGetValue(query["path"], out var t))
+                {
+                    return Json(HttpStatusCode.NotFound, new { detail = "Not a file" });
+                }
+
+                var lines = query.GetValueOrDefault("lines") == "all" ? t.All : t.Machine;
+                if (query.GetValueOrDefault("fmt") == "srt")
+                {
+                    if (t.Stored is null || lines.Length == 0)
+                    {
+                        return Json(HttpStatusCode.NotFound, new { detail = "This file has no machine transcript: transcribe it first." });
+                    }
+
+                    var srt = string.Join("\n", lines.Select((x, i) => $"{i + 1}\n00:00:{i + 1:00},000 --> 00:00:{i + 2:00},000\n{x}\n"));
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(srt, Encoding.UTF8, "application/x-subrip") };
+                }
+
+                return Json(HttpStatusCode.OK, new
+                {
+                    path = query["path"],
+                    stored = t.Stored is null ? null : new { ranges = new[] { new[] { 0.0, t.Stored.Value.Covered } }, covered = t.Stored.Value.Covered, lines = t.All.Length, models = t.Stored.Value.Models, language = t.Stored.Value.Language, updated = 1.0, engine = "whisper.cpp" },
+                    library = t.Library,
+                    writable = false,
+                    sidecar_name = "x.en.whisper.srt",
+                    lines = lines.Select((x, i) => new { start = i + 1.0, end = i + 2.0, text = x, source = "machine" }),
+                });
             case ("DELETE", "/api/clients/self"):
                 if (key != Token || Revoked)
                 {
@@ -117,6 +158,9 @@ internal sealed class FakeQuipclipper : HttpMessageHandler
         Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
     };
 }
+
+/// <summary>A stored transcript as the fake serves it: <see cref="Machine"/> are the lines no subtitle has.</summary>
+internal sealed record FakeTranscript((double Covered, string[] Models, string Language)? Stored, string[] All, string[] Machine, string[] Library);
 
 /// <summary>The plugin's settings, in memory.</summary>
 internal sealed class MemoryConfig : IConfigStore

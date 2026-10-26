@@ -12,12 +12,12 @@ namespace Jellyfin.Plugin.Quipclipper.Server;
 
 /// <summary>
 /// The few quipclipper routes the plugin calls: pairing (<c>quipclipper.pair/1</c>), the
-/// re-index queue and disconnecting. Every call has a short timeout of its own, so a
+/// re-index queue, reading a stored transcript and disconnecting. Every call has a short timeout of its own, so a
 /// quipclipper that hangs can't hold anything of Jellyfin's.
 /// </summary>
 public sealed class QuipclipperClient
 {
-    /// <summary>The scopes the plugin asks for: queueing re-indexes now, reading transcripts for the subtitle provider later.</summary>
+    /// <summary>The scopes the plugin asks for: queueing re-indexes, and reading transcripts for the subtitle provider.</summary>
     public static readonly string[] Scopes = ["index.file", "transcripts.read"];
 
     /// <summary>The most paths quipclipper takes in one re-index request.</summary>
@@ -109,6 +109,45 @@ public sealed class QuipclipperClient
         }
     }
 
+    /// <summary>A media file's stored machine transcript, in Jellyfin's own path (<c>source=jellyfin</c>).</summary>
+    /// <param name="server">quipclipper's URL.</param>
+    /// <param name="token">The client token.</param>
+    /// <param name="mediaPath">The media file, as Jellyfin knows it.</param>
+    /// <param name="lines"><c>machine</c> (the lines no subtitle has) or <c>all</c>.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>What quipclipper holds; null when it doesn't know the file (404).</returns>
+    /// <exception cref="QuipclipperException">quipclipper couldn't be reached or answered another error.</exception>
+    public async Task<TranscriptInfo?> GetTranscriptAsync(Uri server, string token, string mediaPath, string lines, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, TranscriptUrl(server, mediaPath, lines, "json"));
+        request.Headers.Add("X-API-Key", token);
+        using var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        await EnsureAsync(response, "reading the transcript", cancellationToken).ConfigureAwait(false);
+        return await ReadAsync<TranscriptInfo>(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A media file's stored machine lines as SubRip, in Jellyfin's own path (<c>source=jellyfin</c>).</summary>
+    /// <param name="server">quipclipper's URL.</param>
+    /// <param name="token">The client token.</param>
+    /// <param name="mediaPath">The media file, as Jellyfin knows it.</param>
+    /// <param name="lines"><c>machine</c> (the lines no subtitle has) or <c>all</c>.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The SRT text.</returns>
+    /// <exception cref="QuipclipperException">quipclipper couldn't be reached, or has no such lines (404).</exception>
+    public async Task<string> GetTranscriptSrtAsync(Uri server, string token, string mediaPath, string lines, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, TranscriptUrl(server, mediaPath, lines, "srt"));
+        request.Headers.Add("X-API-Key", token);
+        using var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureAsync(response, "reading the transcript", cancellationToken).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Revokes this server's own token (Disconnect).</summary>
     /// <param name="server">quipclipper's URL.</param>
     /// <param name="token">The client token.</param>
@@ -146,6 +185,11 @@ public sealed class QuipclipperClient
     }
 
     private static Uri Url(Uri server, string path) => new(server.AbsoluteUri.TrimEnd('/') + "/" + path);
+
+    private static Uri TranscriptUrl(Uri server, string mediaPath, string lines, string fmt) => Url(
+        server,
+        "api/items/transcript?source=jellyfin&lines=" + Uri.EscapeDataString(lines) + "&fmt=" + fmt
+        + "&path=" + Uri.EscapeDataString(mediaPath));
 
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -188,7 +232,7 @@ public sealed class QuipclipperClient
         }
         catch (JsonException ex)
         {
-            throw new QuipclipperException("quipclipper sent a reply that isn't what pairing expects", ex);
+            throw new QuipclipperException("quipclipper sent a reply that isn't what the plugin expects", ex);
         }
     }
 
@@ -243,6 +287,48 @@ public sealed class PairPoll
 
     /// <summary>Gets or sets the scopes granted, with the token (null from a quipclipper without scopes: a full token).</summary>
     public IReadOnlyList<string>? Scopes { get; set; }
+}
+
+/// <summary>A file's stored machine transcript (<c>GET /api/items/transcript</c>, json).</summary>
+public sealed class TranscriptInfo
+{
+    /// <summary>Gets or sets what was transcribed; null when nothing was.</summary>
+    public StoredTranscript? Stored { get; set; }
+
+    /// <summary>Gets or sets the names of the copies already beside the file (<c>….whisper.srt</c>).</summary>
+    public IReadOnlyList<string> Library { get; set; } = [];
+
+    /// <summary>Gets or sets the lines asked for.</summary>
+    public IReadOnlyList<TranscriptLine> Lines { get; set; } = [];
+}
+
+/// <summary>What a stored transcript holds.</summary>
+public sealed class StoredTranscript
+{
+    /// <summary>Gets or sets the seconds transcribed.</summary>
+    public double Covered { get; set; }
+
+    /// <summary>Gets or sets how many lines it has in all.</summary>
+    public int Lines { get; set; }
+
+    /// <summary>Gets or sets the whisper models it was made with.</summary>
+    public IReadOnlyList<string> Models { get; set; } = [];
+
+    /// <summary>Gets or sets its language (two letters, e.g. <c>en</c>).</summary>
+    public string Language { get; set; } = "en";
+}
+
+/// <summary>One machine line.</summary>
+public sealed class TranscriptLine
+{
+    /// <summary>Gets or sets where it starts, in seconds.</summary>
+    public double Start { get; set; }
+
+    /// <summary>Gets or sets where it ends, in seconds.</summary>
+    public double End { get; set; }
+
+    /// <summary>Gets or sets what was heard.</summary>
+    public string Text { get; set; } = string.Empty;
 }
 
 /// <summary>How quipclipper answered a re-index request.</summary>

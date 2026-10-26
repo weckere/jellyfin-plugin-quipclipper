@@ -2,11 +2,13 @@ using System;
 using System.IO;
 using Jellyfin.Plugin.Quipclipper.Server;
 using Jellyfin.Plugin.Quipclipper.Subtitles;
+using Jellyfin.Plugin.Quipclipper.Transcripts;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Controller.Subtitles;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -14,8 +16,9 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.Quipclipper;
 
 /// <summary>
-/// Registers the subtitle watcher and pairing (Phase 2). The clip metadata providers need
-/// no registration: Jellyfin finds them by type scan.
+/// Registers the subtitle watcher and pairing (Phase 2) and the transcript subtitle provider
+/// (Phase 3; Jellyfin takes subtitle providers from DI only). The clip metadata providers
+/// need no registration: Jellyfin finds them by type scan.
 /// </summary>
 public class PluginServiceRegistrator : IPluginServiceRegistrator
 {
@@ -51,5 +54,6 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
                 sp.GetRequiredService<ILogger<SubtitleWatch>>());
         });
         serviceCollection.AddHostedService<SubtitleWatcher>();
+        serviceCollection.AddSingleton<ISubtitleProvider, TranscriptSubtitleProvider>();
     }
 }

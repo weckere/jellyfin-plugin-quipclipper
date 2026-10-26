@@ -9,6 +9,19 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+### Machine transcripts as a subtitle source (quipclipper M22, Phase 3)
+
+- **Jellyfin's subtitle search offers quipclipper's machine transcripts.** For a movie or
+  episode quipclipper has transcribed, an item's subtitle search lists *quipclipper (machine
+  transcript)* results, "Machine lines only" (the lines no subtitle has) and "Full machine
+  transcript", with the model, how much was heard and the line count. The one picked is saved
+  beside the media as `<name>.en.whisper.srt`, which quipclipper reads as machine lines and
+  Jellyfin shows as its own track.
+- **Manual searches only:** Jellyfin's automatic subtitle downloads get nothing, an item with
+  no stored transcript or with a `.whisper.srt` already gets nothing, and it never starts a
+  transcription. Uses the existing connection (scope `transcripts.read`); needs quipclipper
+  with `lines=` and `source=jellyfin` on `GET /api/items/transcript`.
+
 ## [0.2.0.0] - 2026-10-25
 
 ### Re-index changed subtitles (quipclipper M22, Phase 2)

@@ -1,9 +1,11 @@
 using Jellyfin.Plugin.Quipclipper.Api;
 using Jellyfin.Plugin.Quipclipper.Server;
 using Jellyfin.Plugin.Quipclipper.Subtitles;
+using Jellyfin.Plugin.Quipclipper.Transcripts;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -42,5 +44,6 @@ public class RegistrationTests
         var watch = provider.GetRequiredService<SubtitleWatch>();
         Assert.Equal(["/shows"], watch.WatchedLocations([]));
         Assert.NotNull(provider.GetRequiredService<Func<QuipclipperClient>>()());
+        Assert.IsType<TranscriptSubtitleProvider>(Assert.Single(provider.GetServices<ISubtitleProvider>()));
     }
 }

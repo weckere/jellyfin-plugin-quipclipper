@@ -28,6 +28,15 @@ re-indexed. Once the plugin is connected to quipclipper, a subtitle Jellyfin dow
 into a library makes the plugin queue that file for re-indexing in quipclipper, with no button
 pressed.
 
+**quipclipper's machine transcripts in Jellyfin's subtitle search.** For a movie or episode
+quipclipper has transcribed (whisper), an item's **Edit subtitles › Search** lists results from
+*quipclipper (machine transcript)*: **Machine lines only** (the lines no subtitle has) and
+**Full machine transcript**, named with the model and how much was heard. Picking one saves it
+beside the media as `<name>.en.whisper.srt`, so it is a separate "whisper" track and
+quipclipper reads it as machine lines, never as the file's subtitles. Only searches someone
+runs get results: Jellyfin's automatic downloads never do, and nothing starts a
+transcription.
+
 ## Install
 
 1. In Jellyfin: **Dashboard › Plugins › Repositories › +**, name it `quipclipper`, URL
@@ -55,6 +64,10 @@ docs/API.md, Pairing): its key can queue re-indexes and read transcripts and not
 it is kept in the plugin's configuration (readable by Jellyfin and its admins). **Disconnect**
 revokes it, as does Revoke under quipclipper's Settings › Connected apps. quipclipper maps
 Jellyfin's paths with its Jellyfin path map, which it derives itself when none is set.
+
+The same connection serves the transcript provider: nothing more to set up. To leave it out
+of a library's subtitle search, untick *quipclipper (machine transcript)* under the library's
+*Subtitle downloaders*.
 
 If you change the library's settings, keep **quipclipper** ticked under *Image fetchers*
 for Video and Folder (and above *Screen Grabber*).
@@ -89,6 +102,20 @@ for Video and Folder (and above *Screen Grabber*).
 - quipclipper down or failing: what waits is kept (up to 10,000 files) and retried after 30 s,
   doubling up to 10 minutes. A 401 or 403 (revoked key) stops it until the server connects
   again; the plugin page says so.
+
+### How the transcript provider works
+
+- `TranscriptSubtitleProvider` is an `ISubtitleProvider` for movies and episodes, registered
+  through DI. A search with `IsAutomated` (the *Download missing subtitles* task and
+  scan-time downloads, which take the first result they get) answers nothing at once, as does
+  an item with a machine sidecar beside it already (`<name>[.lang].whisper.srt`/`.vtt`).
+- Otherwise it asks quipclipper `GET /api/items/transcript?source=jellyfin&lines=machine`
+  (the `transcripts.read` scope) for what it has stored. No transcript, a copy already in
+  the library, another language, or quipclipper unreachable: nothing, logged, never thrown.
+- A pick downloads `fmt=srt` (`lines=machine` or `all`) and answers with language
+  `en.whisper`. Jellyfin 12.x names the saved file `<stem>.<language>.srt` as given, so it
+  lands as `<stem>.en.whisper.srt`. A pick that can't be served fails in the dialog rather
+  than saving something wrong.
 
 ## Build and test
 
