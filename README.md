@@ -128,7 +128,9 @@ and lists what answers, the advertised address first. It is opt-in on both sides
 advertises only with `QC_ADVERTISE=1`, and the plugin asks only when you press the button; it
 announces nothing and listens on no fixed port. Multicast doesn't cross a container's bridge
 network, so a Jellyfin in Docker finds nothing unless it uses the host's network. Typing the
-URL always works.
+URL always works. Anything on the LAN can answer such a query, so a listed server is only a
+suggestion: pairing still asks you to compare the code in quipclipper's own banner before
+anything is allowed.
 
 ## When Jellyfin runs in a container
 
@@ -157,7 +159,7 @@ Jellyfin must reach quipclipper over HTTP from wherever it runs:
   server {
       listen 172.18.0.1:8090;          # an address Jellyfin's container reaches
       allow 172.18.0.5; deny all;      # Jellyfin's container only
-      location = /api/pair                { proxy_pass http://127.0.0.1:8000; }
+      location = /api/pair                { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8000; }
       location ~ ^/api/pair/[A-Za-z0-9_-]+$ { proxy_pass http://127.0.0.1:8000; }
       location = /api/index/file          { limit_except POST { deny all; } proxy_pass http://127.0.0.1:8000; }
       location = /api/items/transcript    { limit_except GET  { deny all; } proxy_pass http://127.0.0.1:8000; }

@@ -117,13 +117,20 @@ public sealed class SubtitleWatcher : IHostedService, IDisposable
     {
         try
         {
-            _feature.Run(_logger, Unsubscribe);
+            Unsubscribe(); // also when the feature went off: what was subscribed comes off
         }
 #pragma warning disable CA1031 // stopping goes on regardless
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            Log.WatchFailed(_logger, ex);
+            if (Feature.IsMismatch(ex))
+            {
+                _feature.TurnOff(_logger, ex);
+            }
+            else
+            {
+                Log.WatchFailed(_logger, ex);
+            }
         }
 
         if (_stop is null || _loop is null)

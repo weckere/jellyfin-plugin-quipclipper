@@ -79,7 +79,14 @@ public sealed class PairingService : IDisposable
         }
         finally
         {
-            _polling.Release();
+            try
+            {
+                _polling.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Jellyfin is shutting down
+            }
         }
     }
 

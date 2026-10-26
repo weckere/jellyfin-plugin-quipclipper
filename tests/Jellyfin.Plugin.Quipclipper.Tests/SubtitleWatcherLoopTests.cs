@@ -79,7 +79,7 @@ public sealed class SubtitleWatcherLoopTests : IDisposable
 
             // Jellyfin downloads a subtitle: its item update wakes the loop, which waits for the burst to end.
             _dir.File("shows/TNG/Season 3/TNG.S03E26.de.srt", "neu");
-            _library.Raise(l => l.ItemUpdated += null, null, new ItemChangeEventArgs { Item = new Video { Path = _episode } });
+            _library.Raise(l => l.ItemUpdated += null, _library.Object, new ItemChangeEventArgs { Item = new Video { Path = _episode } });
             Assert.Equal(SubtitleWatch.Quiet, await Nap());
             Assert.Empty(_qc.Requests);
 

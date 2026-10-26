@@ -60,7 +60,9 @@
             (function () {
                 var pluginId = '6b6ea665-479b-4209-9ab3-a5e2a42275df';
                 var page = document.querySelector('#QuipclipperConfigPage');
-                var pollTimer = null;
+                // One chain of polls at a time: each has a run number, and stopping (or starting
+                // another) makes a reply still on its way from an older run count for nothing.
+                var pollTimer = null, pollRun = 0, polling = false;
                 function $(id) { return page.querySelector('#' + id); }
                 function api(type, path, body) {
                     var opts = { type: type, url: ApiClient.getUrl('Quipclipper/' + path), dataType: 'json' };
@@ -83,21 +85,42 @@
                     if (is) el.setAttribute('is', is);
                     return el;
                 }
-                function stopPolling() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+                function stopPolling() {
+                    pollRun++;
+                    polling = false;
+                    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+                }
+                function startPolling(delay) {
+                    stopPolling();
+                    polling = true;
+                    var run = pollRun;
+                    pollTimer = setTimeout(function () { poll(run); }, delay);
+                }
                 function showPairing(code) {
                     $('QcCode').textContent = code || '';
                     $('QcPairing').hidden = false;
                 }
-                function poll() {
+                function poll(run) {
+                    pollTimer = null;
                     api('GET', 'Pair').then(function (s) {
+                        if (run !== pollRun) return;
                         var status = field(s, 'status');
-                        if (status === 'pending') { showPairing(field(s, 'code')); pollTimer = setTimeout(poll, 2000); return; }
+                        if (status === 'pending') {
+                            showPairing(field(s, 'code'));
+                            pollTimer = setTimeout(function () { poll(run); }, 2000);
+                            return;
+                        }
                         stopPolling();
                         $('QcPairing').hidden = true;
                         if (status === 'idle') return;
                         say(field(s, 'detail') || (status === 'connected' ? 'Connected.' : status === 'denied' ? 'quipclipper turned it down.' : 'The request expired; connect again.'));
                         load();
-                    }, function (err) { stopPolling(); $('QcPairing').hidden = true; failed(err); });
+                    }, function (err) {
+                        if (run !== pollRun) return;
+                        stopPolling();
+                        $('QcPairing').hidden = true;
+                        failed(err);
+                    });
                 }
                 function showStatus(st) {
                     var parts = [];
@@ -137,7 +160,7 @@
                         });
                         showStatus(st);
                         // A request still waiting (this page was closed, or is open twice): pick it up.
-                        if (!st.connected && !pollTimer) poll();
+                        if (!st.connected && !polling) startPolling(0);
                     }).catch(failed).then(function () { Dashboard.hideLoadingMsg(); });
                 }
                 function showFound(servers) {
@@ -180,8 +203,7 @@
                     say('');
                     api('POST', 'Pair', { ServerUrl: $('QcServerUrl').value }).then(function (s) {
                         showPairing(field(s, 'code'));
-                        stopPolling();
-                        pollTimer = setTimeout(poll, 2000);
+                        startPolling(2000);
                     }, failed);
                 });
                 $('QcCancel').addEventListener('click', function () {

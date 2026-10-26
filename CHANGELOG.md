@@ -23,7 +23,9 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
   themselves on the LAN (quipclipper's `QC_ADVERTISE=1`, `_quipclipper._tcp`) and fill in
   the URL picked. Only when asked: typing the URL stays the way in. One-shot mDNS queries,
   so the plugin announces nothing and binds no port; a Jellyfin in a container finds
-  servers only with the host's network.
+  servers only with the host's network. Anyone on the LAN can answer, so only answers from
+  the mDNS port count and what is read is bounded (packet, name, record and server
+  counts).
 - A machine transcript Jellyfin saved in its own metadata folder for the item (a library
   with "Save subtitles with media" off) counts as there: the item isn't offered one again.
 

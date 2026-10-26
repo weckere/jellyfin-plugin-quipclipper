@@ -42,7 +42,7 @@ public class ClipFolderMetadataProvider : ILocalMetadataProvider<Folder>, IHasIt
     public Task<MetadataResult<Folder>> GetMetadata(ItemInfo info, IDirectoryService directoryService, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(info);
-        return Task.FromResult(_feature.Run(_logger, () => Read(info, directoryService), new MetadataResult<Folder>()));
+        return Task.FromResult(_feature.Run(_logger, () => Read(info, directoryService), Nothing));
     }
 
     /// <inheritdoc />
@@ -51,6 +51,9 @@ public class ClipFolderMetadataProvider : ILocalMetadataProvider<Folder>, IHasIt
         ArgumentNullException.ThrowIfNull(item);
         return _feature.Run(_logger, () => Changed(item, directoryService), false);
     }
+
+    // Jellyfin's defaults; built here, not in GetMetadata, so the guard covers it.
+    private static MetadataResult<Folder> Nothing() => new();
 
     private MetadataResult<Folder> Read(ItemInfo info, IDirectoryService directoryService)
     {

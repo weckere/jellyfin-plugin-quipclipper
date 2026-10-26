@@ -48,6 +48,43 @@ public sealed class DiscoveryTests
     }
 
     [Fact]
+    public void A_name_longer_than_DNS_allows_is_refused()
+    {
+        var label = new string('a', 63);
+        var longName = string.Join('.', Enumerable.Repeat(label, 5)) + ".local"; // > 255 bytes
+        var answer = Packet.Answer(Packet.Ptr(Discovery.ServiceType, "x." + Discovery.ServiceType), Packet.A(longName, "10.0.0.1"));
+        Assert.Empty(Discovery.Read([answer]));
+    }
+
+    [Fact]
+    public void A_flood_of_records_keeps_only_a_bounded_number()
+    {
+        // 64 records a packet are read; 256 names kept across packets: what a stranger
+        // on the LAN can make Jellyfin hold stays small, and the real answer still counts.
+        var flood = Enumerable.Range(0, 20).Select(p => Packet.Answer(Enumerable.Range(0, 100)
+            .Select(i => Packet.Ptr(Discovery.ServiceType, $"junk{p}-{i}." + Discovery.ServiceType)).ToArray())).ToList();
+        var servers = Discovery.Read([Zeroconf, .. flood]);
+        Assert.Equal("QuipClipper on nas", Assert.Single(servers).Name); // junk has no SRV/A: never listed
+    }
+
+    [Fact]
+    public async Task An_answer_from_another_port_doesnt_count()
+    {
+        using var impostor = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var advertiser = new FakeAdvertiser(question =>
+        {
+            return question == (Discovery.ServiceType, 12) ? [Zeroconf] : [];
+        });
+        advertiser.Before = to => impostor.Send(Packet.Answer(
+            Packet.Ptr(Discovery.ServiceType, "evil." + Discovery.ServiceType),
+            Packet.Srv("evil." + Discovery.ServiceType, "evil.local", 80),
+            Packet.A("evil.local", "10.6.6.6")), to);
+        var found = await new Discovery(advertiser.EndPoint, () => [])
+            .FindAsync(TimeSpan.FromMinutes(1), default, servers => servers.Count > 0);
+        Assert.Equal("QuipClipper on nas", Assert.Single(found).Name);
+    }
+
+    [Fact]
     public void Other_services_answering_are_left_out()
     {
         var answer = Packet.Answer(
@@ -124,6 +161,9 @@ public sealed class DiscoveryTests
 
         public List<(string Name, ushort Type)> Asked { get; } = [];
 
+        /// <summary>Runs before each answer is sent, with where it goes (an impostor answers first).</summary>
+        public Action<IPEndPoint>? Before { get; set; }
+
         public void Dispose()
         {
             _stop.Cancel();
@@ -147,6 +187,7 @@ public sealed class DiscoveryTests
 
                         foreach (var answer in _answers(question))
                         {
+                            Before?.Invoke(query.RemoteEndPoint);
                             await _udp.SendAsync(answer, query.RemoteEndPoint, _stop.Token);
                         }
                     }

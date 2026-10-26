@@ -70,12 +70,15 @@ public class ClipImageProvider : IDynamicImageProvider, IHasOrder
     public Task<DynamicImageResponse> GetImage(BaseItem item, ImageType type, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return Task.FromResult(_feature.Run(_logger, () => Image(item, type), new DynamicImageResponse { HasImage = false }));
+        return Task.FromResult(_feature.Run(_logger, () => Image(item, type), NoImage));
     }
+
+    // Built here, not in GetImage, so the guard covers it.
+    private static DynamicImageResponse NoImage() => new() { HasImage = false };
 
     private DynamicImageResponse Image(BaseItem item, ImageType type)
     {
-        var none = new DynamicImageResponse { HasImage = false };
+        var none = NoImage();
         if (type != ImageType.Primary || !Sidecars.Handles(item))
         {
             return none;

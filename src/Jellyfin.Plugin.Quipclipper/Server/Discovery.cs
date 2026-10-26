@@ -19,7 +19,9 @@ namespace Jellyfin.Plugin.Quipclipper.Server;
 /// One-shot queries from an ephemeral port (RFC 6762 §5.1): responders answer by unicast,
 /// so nothing binds port 5353 and nothing is announced. IPv4 only. Multicast doesn't cross
 /// a container's bridge network, so a Jellyfin in Docker finds nothing unless it runs with
-/// the host's network.
+/// the host's network. Anyone on the LAN can answer, so what is read is bounded (packet,
+/// name, record and server counts) and only answers from the mDNS port count; a server
+/// listed is a suggestion an administrator picks, then pairs with by comparing a code.
 /// </summary>
 public sealed class Discovery
 {
@@ -38,6 +40,12 @@ public sealed class Discovery
     private const ushort TypeSrv = 33;
     private const int MaxServers = 50;
     private const int MaxPackets = 200;
+    private const int MaxPacketBytes = 9000;   // RFC 6762 §17
+    private const int MaxRecordsPerPacket = 64;
+    private const int MaxNames = 256;          // owner names kept across every answer
+    private const int MaxNameBytes = 255;      // RFC 1035 §2.3.4
+    private const int MaxAsked = 32;           // names asked about in follow-up queries
+    private const int MaxQuestions = 16;
 
     private readonly IPEndPoint _target;
     private readonly Func<IReadOnlyList<IPAddress>> _interfaces;
@@ -87,13 +95,14 @@ public sealed class Discovery
                 continue; // an ICMP "port unreachable" from a host that doesn't listen
             }
 
-            if (!records.Add(received.Buffer))
+            // Responders answer a one-shot query from the mDNS port (RFC 6762 §6.7).
+            if (received.RemoteEndPoint.Port != _target.Port || !records.Add(received.Buffer))
             {
                 continue;
             }
 
             // A responder that left out an instance's SRV/TXT (or its host's address): ask for them.
-            var missing = records.Missing().Where(asked.Add).ToList();
+            var missing = records.Missing().Where(n => asked.Count < MaxAsked && asked.Add(n)).Take(MaxQuestions / 2).ToList();
             if (missing.Count > 0)
             {
                 await SendAsync(udp, Query(missing.SelectMany(Follow).ToArray()), listen.Token).ConfigureAwait(false);
@@ -116,7 +125,8 @@ public sealed class Discovery
     /// <returns>The packet.</returns>
     internal static byte[] Query(params (string Name, ushort Type)[] questions)
     {
-        var packet = new List<byte>(512) { 0, 0, 0, 0, 0, (byte)questions.Length, 0, 0, 0, 0, 0, 0 };
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(questions.Length, MaxQuestions);
+        var packet = new List<byte>(512) { 0, 0, 0, 0, (byte)(questions.Length >> 8), (byte)questions.Length, 0, 0, 0, 0, 0, 0 };
         foreach (var (name, type) in questions)
         {
             foreach (var label in name.TrimEnd('.').Split('.'))
@@ -201,6 +211,11 @@ public sealed class Discovery
         /// <summary>Reads one answer packet; false when it isn't one (or can't be read).</summary>
         public bool Add(byte[] packet)
         {
+            if (packet.Length > MaxPacketBytes)
+            {
+                return false;
+            }
+
             try
             {
                 return Parse(packet);
@@ -230,8 +245,13 @@ public sealed class Discovery
         public List<FoundServer> Servers()
         {
             var found = new List<FoundServer>();
-            foreach (var instance in Instances().Take(MaxServers))
+            foreach (var instance in Instances())
             {
+                if (found.Count == MaxServers)
+                {
+                    break;
+                }
+
                 var txt = _txt.GetValueOrDefault(instance) ?? [];
                 var urls = new List<string>();
                 var advertised = txt.TryGetValue("url", out var u) && Uri.TryCreate(u, UriKind.Absolute, out var parsed)
@@ -290,7 +310,7 @@ public sealed class Discovery
                 at += 4;
             }
 
-            for (var i = 0; i < records; i++)
+            for (var i = 0; i < Math.Min(records, MaxRecordsPerPacket); i++)
             {
                 var name = ReadName(packet, ref at);
                 var type = BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(at));
@@ -302,20 +322,24 @@ public sealed class Discovery
                     throw new ArgumentException("A record runs past the packet.");
                 }
 
+                // Enough kept: nothing more that grows what is held (a known name's SRV or TXT
+                // may still be replaced), so a stranger flooding answers can't fill memory.
+                var full = Names >= MaxNames;
+
                 switch (type)
                 {
-                    case TypePtr:
+                    case TypePtr when !full:
                         var cursor = data;
                         Set(_ptr, name).Add(ReadName(packet, ref cursor));
                         break;
-                    case TypeSrv:
+                    case TypeSrv when !full || _srv.ContainsKey(name):
                         var host = data + 6;
                         _srv[name] = (ReadName(packet, ref host), BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(data + 4)));
                         break;
-                    case TypeTxt:
+                    case TypeTxt when !full || _txt.ContainsKey(name):
                         _txt[name] = ReadTxt(packet.AsSpan(data, length));
                         break;
-                    case TypeA when length == 4:
+                    case TypeA when length == 4 && !full:
                         Set(_a, name).Add(new IPAddress(packet.AsSpan(data, 4)));
                         break;
                 }
@@ -323,6 +347,8 @@ public sealed class Discovery
 
             return true;
         }
+
+        private int Names => _ptr.Count + _srv.Count + _txt.Count + _a.Count + _ptr.Values.Sum(v => v.Count);
 
         private static HashSet<T> Set<T>(Dictionary<string, HashSet<T>> map, string key)
         {
@@ -359,9 +385,20 @@ public sealed class Discovery
             var labels = new List<string>();
             var cursor = at;
             var jumped = false;
+            var bytes = 1;
             for (var hops = 0; hops < 20;)
             {
                 var length = packet[cursor];
+                if ((length & 0xC0) is 0x40 or 0x80)
+                {
+                    throw new FormatException("A reserved label type.");
+                }
+
+                if ((length & 0xC0) == 0 && (bytes += length + 1) > MaxNameBytes)
+                {
+                    throw new FormatException("A name longer than DNS allows.");
+                }
+
                 if (length == 0)
                 {
                     if (!jumped)

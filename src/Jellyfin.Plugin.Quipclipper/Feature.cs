@@ -31,8 +31,10 @@ internal sealed class Feature
     /// <summary>Machine transcripts in Jellyfin's subtitle search (the subtitle provider).</summary>
     public static readonly Feature Transcripts = new("machine transcripts");
 
+    private readonly object _lock = new();
     private int _off;
     private int _logged;
+    private string? _reason;
 
     /// <summary>Initializes a new instance of the <see cref="Feature"/> class (the tests make their own).</summary>
     /// <param name="name">What the log and the settings page call it.</param>
@@ -51,14 +53,24 @@ internal sealed class Feature
     public bool IsOn => Volatile.Read(ref _off) == 0;
 
     /// <summary>Gets why the feature went off; null while it is on.</summary>
-    public string? Reason { get; private set; }
+    public string? Reason
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _reason;
+            }
+        }
+    }
 
     /// <summary>Whether an exception says this Jellyfin isn't the one the plugin was built against.</summary>
     /// <param name="exception">The exception.</param>
     /// <returns>True for a missing member or type, or an assembly that won't load.</returns>
     public static bool IsMismatch(Exception? exception) => exception switch
     {
-        MissingMemberException or TypeLoadException or BadImageFormatException or FileLoadException => true,
+        // MemberAccessException: a member gone (MissingMethod/Field) or made non-public (MethodAccess/FieldAccess).
+        MemberAccessException or TypeLoadException or BadImageFormatException or FileLoadException => true,
         // An assembly gone: its display name ("MediaBrowser.Controller, Version=…"), not a file path.
         FileNotFoundException { FileName: { } name } => name.Contains(", Version=", StringComparison.Ordinal),
         TypeInitializationException t => IsMismatch(t.InnerException),
@@ -71,23 +83,18 @@ internal sealed class Feature
     /// <param name="work">The work. Kept in its own method by the caller, so that a mismatch in it surfaces here.</param>
     /// <param name="off">What the entry point answers while the feature is off (Jellyfin's default).</param>
     /// <returns>What the work returned, or <paramref name="off"/>.</returns>
-    public T Run<T>(ILogger logger, Func<T> work, T off)
-    {
-        ArgumentNullException.ThrowIfNull(work);
-        if (!IsOn)
-        {
-            return off;
-        }
+    public T Run<T>(ILogger logger, Func<T> work, T off) => Run(logger, work, off, null);
 
-        try
-        {
-            return work();
-        }
-        catch (Exception ex) when (IsMismatch(ex))
-        {
-            TurnOff(logger, ex);
-            return off;
-        }
+    /// <summary>Runs an entry point's work, unless the feature is off; the answer while off is made only then.</summary>
+    /// <typeparam name="T">What the work returns.</typeparam>
+    /// <param name="logger">Where a mismatch is logged.</param>
+    /// <param name="work">The work, in its own method.</param>
+    /// <param name="off">Makes the answer while the feature is off: kept out of the entry point, so that a Jellyfin type it builds that changed surfaces here too.</param>
+    /// <returns>What the work returned, or what <paramref name="off"/> made.</returns>
+    public T Run<T>(ILogger logger, Func<T> work, Func<T> off)
+    {
+        ArgumentNullException.ThrowIfNull(off);
+        return Run(logger, work, default(T)!, off);
     }
 
     /// <summary>Runs work that returns nothing, unless the feature is off.</summary>
@@ -131,15 +138,50 @@ internal sealed class Feature
         }
     }
 
+    private T Run<T>(ILogger logger, Func<T> work, T off, Func<T>? makeOff)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        if (IsOn)
+        {
+            try
+            {
+                return work();
+            }
+            catch (Exception ex) when (IsMismatch(ex))
+            {
+                TurnOff(logger, ex);
+            }
+        }
+
+        if (makeOff is null)
+        {
+            return off;
+        }
+
+        try
+        {
+            return makeOff();
+        }
+        catch (Exception ex) when (IsMismatch(ex))
+        {
+            TurnOff(logger, ex);
+            throw; // nothing left to answer with: Jellyfin logs it for this one call
+        }
+    }
+
     /// <summary>Turns the feature off for good (until Jellyfin restarts), logging why the first time.</summary>
     /// <param name="logger">Where to log it; null before Jellyfin has a logger to give (service registration), see <see cref="LogUnlogged"/>.</param>
     /// <param name="exception">The mismatch.</param>
     public void TurnOff(ILogger? logger, Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
-        if (Interlocked.Exchange(ref _off, 1) == 0)
+        lock (_lock)
         {
-            Reason = exception.GetType().Name + ": " + exception.Message;
+            if (_off == 0)
+            {
+                _reason = exception.GetType().Name + ": " + exception.Message;
+                Volatile.Write(ref _off, 1);
+            }
         }
 
         if (logger is not null && Interlocked.Exchange(ref _logged, 1) == 0)

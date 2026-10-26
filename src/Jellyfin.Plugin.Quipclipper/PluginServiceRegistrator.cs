@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Jellyfin.Plugin.Quipclipper.Server;
 using Jellyfin.Plugin.Quipclipper.Subtitles;
 using Jellyfin.Plugin.Quipclipper.Transcripts;
@@ -101,11 +102,19 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         });
     }
 
+    // Each part loads its type here, inside the guard: a type that no longer fits Jellyfin's
+    // interface (a member added to it) fails to load now, turning its feature off, instead
+    // of later, when Jellyfin's own container first builds it.
     private static void RegisterWatcher(IServiceCollection serviceCollection)
-        => serviceCollection.AddHostedService<SubtitleWatcher>();
+    {
+        RuntimeHelpers.RunClassConstructor(typeof(SubtitleWatcher).TypeHandle);
+        serviceCollection.AddHostedService<SubtitleWatcher>();
+    }
 
     private static void RegisterTranscripts(IServiceCollection serviceCollection)
-        => serviceCollection.AddSingleton<ISubtitleProvider>(sp =>
+    {
+        RuntimeHelpers.RunClassConstructor(typeof(TranscriptSubtitleProvider).TypeHandle);
+        serviceCollection.AddSingleton<ISubtitleProvider>(sp =>
         {
             var factory = sp.GetRequiredService<System.Net.Http.IHttpClientFactory>();
             var library = sp.GetRequiredService<ILibraryManager>();
@@ -115,4 +124,5 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
                 sp.GetRequiredService<ILogger<TranscriptSubtitleProvider>>(),
                 path => MetadataFolder(library, path));
         });
+    }
 }

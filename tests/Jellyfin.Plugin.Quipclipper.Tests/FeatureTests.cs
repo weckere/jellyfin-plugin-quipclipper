@@ -60,6 +60,7 @@ public class FeatureTests
     {
         { new MissingMethodException("BaseItem", "GetImageInfo"), true },
         { new MissingFieldException("x"), true },
+        { new MethodAccessException("now internal"), true },
         { new TypeLoadException("x"), true },
         { new FileLoadException("x"), true },
         { new FileNotFoundException("gone", "MediaBrowser.Controller, Version=13.0.0.0, Culture=neutral, PublicKeyToken=null"), true },
@@ -93,6 +94,24 @@ public class FeatureTests
     }
 
     [Fact]
+    public void The_answer_while_off_is_made_only_when_it_is_needed()
+    {
+        var feature = new Feature("test");
+        var made = 0;
+        string Off()
+        {
+            made++;
+            return "off";
+        }
+
+        Assert.Equal("on", feature.Run(NullLogger.Instance, () => "on", Off));
+        Assert.Equal(0, made);
+        Assert.Equal("off", feature.Run<string>(NullLogger.Instance, () => throw Gone(), Off));
+        Assert.Equal("off", feature.Run(NullLogger.Instance, () => "on", Off));
+        Assert.Equal(2, made);
+    }
+
+    [Fact]
     public async Task An_ordinary_error_is_the_entry_points_own_and_leaves_the_feature_on()
     {
         var feature = new Feature("test");
@@ -105,7 +124,7 @@ public class FeatureTests
     }
 
     [Fact]
-    public void A_part_of_the_registration_that_fails_turns_its_features_off_and_is_logged_when_the_plugin_starts()
+    public void A_registration_part_that_hits_a_mismatch_turns_its_features_off_and_is_logged_when_the_plugin_starts()
     {
         var a = new Feature("a");
         var b = new Feature("b");
@@ -232,10 +251,10 @@ public class FeatureTests
         await watcher.StartAsync(default);
 
         config.Throw = Gone();
-        library.Raise(l => l.ItemUpdated += null, null, new ItemChangeEventArgs { Item = new Video { Path = "/shows/a.mkv" } });
+        library.Raise(l => l.ItemUpdated += null, library.Object, new ItemChangeEventArgs { Item = new Video { Path = "/shows/a.mkv" } });
         Assert.False(feature.IsOn);
         config.Throw = null;
-        library.Raise(l => l.ItemUpdated += null, null, new ItemChangeEventArgs { Item = new Video { Path = "/shows/b.mkv" } });
+        library.Raise(l => l.ItemUpdated += null, library.Object, new ItemChangeEventArgs { Item = new Video { Path = "/shows/b.mkv" } });
         Assert.Equal(1, config.Reads);
         Assert.Single(logger.Errors());
         await watcher.StopAsync(default);
