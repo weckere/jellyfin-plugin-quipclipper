@@ -9,6 +9,8 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+## [0.3.1.0] - 2026-10-26
+
 ### Fixed
 
 - The transcript provider's result ids are signed with the plugin's key: a download request
