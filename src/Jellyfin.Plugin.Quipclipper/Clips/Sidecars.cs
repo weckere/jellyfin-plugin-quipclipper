@@ -33,7 +33,7 @@ internal static class Sidecars
         {
             return !string.IsNullOrEmpty(item.Path) && item.IsFileProtocol;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException && !Feature.IsMismatch(ex))
         {
             // IsFileProtocol asks a server service; without one, it's not ours to touch.
             return false;

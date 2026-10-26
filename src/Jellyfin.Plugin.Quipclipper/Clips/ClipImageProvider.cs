@@ -31,6 +31,7 @@ public class ClipImageProvider : IDynamicImageProvider, IHasOrder
     private readonly ILibraryManager _libraryManager;
     private readonly IFileSystem _fileSystem;
     private readonly ILogger<ClipImageProvider> _logger;
+    private readonly Feature _feature;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ClipImageProvider"/> class.
@@ -39,11 +40,19 @@ public class ClipImageProvider : IDynamicImageProvider, IHasOrder
     /// <param name="fileSystem">The file system.</param>
     /// <param name="logger">The logger.</param>
     public ClipImageProvider(ILibraryManager libraryManager, IFileSystem fileSystem, ILogger<ClipImageProvider> logger)
+        : this(libraryManager, fileSystem, logger, Feature.ClipArtwork)
+    {
+    }
+
+    internal ClipImageProvider(ILibraryManager libraryManager, IFileSystem fileSystem, ILogger<ClipImageProvider> logger, Feature feature)
     {
         _libraryManager = libraryManager;
         _fileSystem = fileSystem;
         _logger = logger;
+        _feature = feature;
     }
+
+    internal Feature Feature => _feature;
 
     /// <inheritdoc />
     public string Name => "quipclipper";
@@ -52,7 +61,7 @@ public class ClipImageProvider : IDynamicImageProvider, IHasOrder
     public int Order => 0;
 
     /// <inheritdoc />
-    public bool Supports(BaseItem item) => item is not null && Sidecars.Handles(item);
+    public bool Supports(BaseItem item) => item is not null && _feature.Run(_logger, () => Sidecars.Handles(item), false);
 
     /// <inheritdoc />
     public IEnumerable<ImageType> GetSupportedImages(BaseItem item) => [ImageType.Primary];
@@ -61,10 +70,15 @@ public class ClipImageProvider : IDynamicImageProvider, IHasOrder
     public Task<DynamicImageResponse> GetImage(BaseItem item, ImageType type, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(item);
+        return Task.FromResult(_feature.Run(_logger, () => Image(item, type), new DynamicImageResponse { HasImage = false }));
+    }
+
+    private DynamicImageResponse Image(BaseItem item, ImageType type)
+    {
         var none = new DynamicImageResponse { HasImage = false };
         if (type != ImageType.Primary || !Sidecars.Handles(item))
         {
-            return Task.FromResult(none);
+            return none;
         }
 
         try
@@ -72,16 +86,16 @@ public class ClipImageProvider : IDynamicImageProvider, IHasOrder
             var path = item.GetType() == typeof(Folder) ? FolderImagePath(item) : ClipImagePath(item);
             if (path is null || ImageFormatOf(path) is not { } format)
             {
-                return Task.FromResult(none);
+                return none;
             }
 
             var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-            return Task.FromResult(new DynamicImageResponse { HasImage = true, Stream = stream, Format = format });
+            return new DynamicImageResponse { HasImage = true, Stream = stream, Format = format };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException && !Feature.IsMismatch(ex))
         {
             Log.ImageFailed(_logger, ex, item.Path);
-            return Task.FromResult(none);
+            return none;
         }
     }
 

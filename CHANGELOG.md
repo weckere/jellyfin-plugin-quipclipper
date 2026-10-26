@@ -9,6 +9,35 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+### Hardening and discovery (quipclipper M22, Phase 4)
+
+- **A Jellyfin the plugin wasn't built for turns one feature off, not a scan.** Clip
+  metadata, clip artwork, subtitle re-index and machine transcripts each run behind a
+  guard: a method or type this Jellyfin lacks (a newer Jellyfin loads an older plugin
+  regardless) is logged once and turns that feature off until Jellyfin restarts, instead
+  of failing every item of a library scan. The settings page says which feature is off and
+  why. Registering the plugin's services is guarded the same way, so a part Jellyfin can't
+  take no longer marks the whole plugin as malfunctioning, and the watcher never stops
+  Jellyfin starting.
+- **Find on this network.** The settings page can list quipclipper servers that advertise
+  themselves on the LAN (quipclipper's `QC_ADVERTISE=1`, `_quipclipper._tcp`) and fill in
+  the URL picked. Only when asked: typing the URL stays the way in. One-shot mDNS queries,
+  so the plugin announces nothing and binds no port; a Jellyfin in a container finds
+  servers only with the host's network.
+- A machine transcript Jellyfin saved in its own metadata folder for the item (a library
+  with "Save subtitles with media" off) counts as there: the item isn't offered one again.
+
+### Fixed
+
+- Two open settings pages polling one pairing request both end up connected; the second
+  showed "expired" because the first had collected the token.
+- An Allow given in quipclipper after the settings page was closed is collected the next
+  time the page opens (the page picks up a request still waiting and shows its code).
+- Long messages on the settings page wrap at phone width.
+- The subtitle watcher waits on Jellyfin's clock throughout (the debounce waited on real
+  time), and a failed run pauses on it too.
+- CI and the release workflow use the Node 24 versions of GitHub's actions.
+
 ## [0.3.1.0] - 2026-10-26
 
 ### Fixed

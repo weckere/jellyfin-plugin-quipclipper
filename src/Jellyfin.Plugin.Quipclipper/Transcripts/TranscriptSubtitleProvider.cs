@@ -21,9 +21,11 @@ namespace Jellyfin.Plugin.Quipclipper.Transcripts;
 /// "Search subtitles" dialog (quipclipper M22, Phase 3). Manual searches only: Jellyfin's
 /// automatic downloads (the "Download missing subtitles" task, scan-time downloads) get
 /// nothing, it never starts a transcription, and an item that already has a machine
-/// sidecar gets nothing. What Jellyfin saves is named <c>&lt;stem&gt;.en.whisper.srt</c>:
-/// Jellyfin puts the response's language into the file name as given, and quipclipper
-/// reads that name as machine lines, never as the file's subtitles.
+/// sidecar gets nothing (beside the media, or in Jellyfin's own metadata folder for the item,
+/// where Jellyfin saves when a library's "Save subtitles with media" is off). What Jellyfin
+/// saves is named <c>&lt;stem&gt;.en.whisper.srt</c>: Jellyfin puts the response's language
+/// into the file name as given, and quipclipper reads that name as machine lines, never as
+/// the file's subtitles.
 /// </summary>
 public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
 {
@@ -41,6 +43,8 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
     private readonly IConfigStore _config;
     private readonly Func<QuipclipperClient> _client;
     private readonly ILogger<TranscriptSubtitleProvider> _logger;
+    private readonly Func<string, string?> _metadataFolder;
+    private readonly Feature _feature;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TranscriptSubtitleProvider"/> class.
@@ -48,12 +52,22 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
     /// <param name="config">The plugin's settings (quipclipper's URL and token).</param>
     /// <param name="client">Makes a quipclipper client.</param>
     /// <param name="logger">The logger.</param>
-    public TranscriptSubtitleProvider(IConfigStore config, Func<QuipclipperClient> client, ILogger<TranscriptSubtitleProvider> logger)
+    /// <param name="metadataFolder">Jellyfin's own metadata folder for the item at a media path, or null (none known).</param>
+    public TranscriptSubtitleProvider(IConfigStore config, Func<QuipclipperClient> client, ILogger<TranscriptSubtitleProvider> logger, Func<string, string?>? metadataFolder = null)
+        : this(config, client, logger, metadataFolder, Feature.Transcripts)
+    {
+    }
+
+    internal TranscriptSubtitleProvider(IConfigStore config, Func<QuipclipperClient> client, ILogger<TranscriptSubtitleProvider> logger, Func<string, string?>? metadataFolder, Feature feature)
     {
         _config = config;
         _client = client;
         _logger = logger;
+        _metadataFolder = metadataFolder ?? (_ => null);
+        _feature = feature;
     }
+
+    internal Feature Feature => _feature;
 
     /// <inheritdoc />
     public string Name => ProviderName;
@@ -71,9 +85,14 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
     /// <summary>Whether a machine sidecar is beside the media file already (<c>&lt;stem&gt;[.lang].whisper.srt/.vtt</c>, as quipclipper finds them, or Jellyfin's <c>.whisper.0.srt</c> for a second copy).</summary>
     /// <param name="mediaPath">The media file.</param>
     /// <returns>True when one is.</returns>
-    public static bool HasMachineSidecar(string mediaPath)
+    public static bool HasMachineSidecar(string mediaPath) => HasMachineSidecar(mediaPath, Path.GetDirectoryName(mediaPath));
+
+    /// <summary>Whether a machine sidecar for the media file is in a folder (beside it, or Jellyfin's metadata folder for it).</summary>
+    /// <param name="mediaPath">The media file.</param>
+    /// <param name="dir">The folder to look in.</param>
+    /// <returns>True when one is.</returns>
+    public static bool HasMachineSidecar(string mediaPath, string? dir)
     {
-        var dir = Path.GetDirectoryName(mediaPath);
         if (string.IsNullOrEmpty(dir))
         {
             return false;
@@ -93,14 +112,50 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<RemoteSubtitleInfo>> Search(SubtitleSearchRequest request, CancellationToken cancellationToken)
+    public Task<IEnumerable<RemoteSubtitleInfo>> Search(SubtitleSearchRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return _feature.RunAsync<IEnumerable<RemoteSubtitleInfo>>(_logger, () => Find(request, cancellationToken), []);
+    }
+
+    /// <inheritdoc />
+    public async Task<SubtitleResponse> GetSubtitles(string id, CancellationToken cancellationToken)
+    {
+        var response = await _feature.RunAsync(_logger, () => Fetch(id, cancellationToken), null).ConfigureAwait(false);
+        return response ?? throw new InvalidOperationException(
+            "The quipclipper plugin's machine transcripts are off until Jellyfin restarts (this Jellyfin doesn't match the plugin; see the log): " + _feature.Reason);
+    }
+
+    /// <summary>Whether the item at a media path has a machine sidecar already, beside it or in Jellyfin's metadata folder for it.</summary>
+    /// <param name="mediaPath">The media file.</param>
+    /// <returns>True when it has.</returns>
+    internal bool HasSidecar(string mediaPath)
+    {
+        if (HasMachineSidecar(mediaPath))
+        {
+            return true;
+        }
+
+        string? folder;
+        try
+        {
+            folder = _metadataFolder(mediaPath);
+        }
+        catch (Exception ex) when (!Feature.IsMismatch(ex) && ex is not OperationCanceledException)
+        {
+            return false; // Jellyfin couldn't say: what is beside the media is all there is to go on
+        }
+
+        return HasMachineSidecar(mediaPath, folder);
+    }
+
+    private async Task<IEnumerable<RemoteSubtitleInfo>> Find(SubtitleSearchRequest request, CancellationToken cancellationToken)
+    {
         var config = _config.Current;
         var path = request.MediaPath;
         // Manual only (D-037): the automatic downloads take the first result of the first
         // provider that answers, which would put machine text in as if it were subtitles.
-        if (request.IsAutomated || !config.Connected || string.IsNullOrEmpty(path) || HasMachineSidecar(path))
+        if (request.IsAutomated || !config.Connected || string.IsNullOrEmpty(path) || HasSidecar(path))
         {
             return [];
         }
@@ -129,15 +184,14 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
             Log.SearchFailed(_logger, path, ex.Message);
             return [];
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (!Feature.IsMismatch(ex) && (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested))
         {
             Log.SearchCrashed(_logger, ex, path);
             return [];
         }
     }
 
-    /// <inheritdoc />
-    public async Task<SubtitleResponse> GetSubtitles(string id, CancellationToken cancellationToken)
+    private async Task<SubtitleResponse?> Fetch(string id, CancellationToken cancellationToken)
     {
         // Jellyfin shows the message of what this throws: a download that can't be served
         // fails rather than saving an empty or misnamed file.
@@ -151,9 +205,9 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
         // Signed with the token: an id made up by hand can't name another file's path.
         var (lines, language, path) = ParseId(id, config.Token)
             ?? throw new ArgumentException("Not a quipclipper machine transcript id from this server.", nameof(id));
-        if (HasMachineSidecar(path))
+        if (HasSidecar(path))
         {
-            throw new InvalidOperationException("A machine transcript is beside this file already.");
+            throw new InvalidOperationException("This file has a machine transcript already (beside it, or in Jellyfin's metadata folder for it).");
         }
 
         var srt = await _client().GetTranscriptSrtAsync(server, config.Token, path, lines, cancellationToken).ConfigureAwait(false);

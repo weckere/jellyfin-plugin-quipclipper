@@ -11,18 +11,28 @@
                 <h2 class="sectionTitle">quipclipper</h2>
                 <p>Clip metadata needs nothing set here: a Home Videos library on quipclipper's clips folder shows each clip by its line.</p>
 
-                <h3 class="sectionTitle">Re-index changed subtitles</h3>
-                <p>When Jellyfin downloads a subtitle, or notices one dropped into a library, this server tells quipclipper, which re-indexes that file so its lines are searchable within a minute. Connect pairs with quipclipper: allow the code shown here in quipclipper's banner. Its key can only queue re-indexes and read transcripts.</p>
+                <div id="QcFeatures" class="verticalSection" role="alert" hidden>
+                    <p><strong>Off until Jellyfin restarts:</strong> <span id="QcFeaturesOff" style="overflow-wrap:anywhere"></span>. This Jellyfin doesn't match what the plugin was built against; update the plugin. Jellyfin's log has the details.</p>
+                </div>
+
+                <h3 class="sectionTitle">Re-index changed subtitles, and machine transcripts</h3>
+                <p>When Jellyfin downloads a subtitle, or notices one dropped into a library, this server tells quipclipper, which re-indexes that file so its lines are searchable within a minute. Jellyfin's subtitle search also offers quipclipper's machine transcripts. Connect pairs with quipclipper: allow the code shown here in quipclipper's banner. Its key can only queue re-indexes and read transcripts.</p>
 
                 <div id="QcDisconnected">
                     <div class="inputContainer">
-                        <input is="emby-input" type="url" id="QcServerUrl" label="quipclipper's URL, as this server reaches it" placeholder="http://quipclipper:8080" />
+                        <input is="emby-input" type="url" id="QcServerUrl" label="quipclipper's URL, as this server reaches it" placeholder="http://quipclipper:8080" autocomplete="url" />
                         <div class="fieldDescription">Jellyfin calls it, not your browser: from a container, its address on Jellyfin's network.</div>
                     </div>
                     <button is="emby-button" type="button" id="QcConnect" class="raised button-submit block"><span>Connect</span></button>
                     <div id="QcPairing" hidden>
                         <p>Allow <strong>Jellyfin</strong> in quipclipper's banner if it shows the code <strong id="QcCode" style="font-size:1.4em;letter-spacing:.15em"></strong>.</p>
                         <button is="emby-button" type="button" id="QcCancel" class="raised block"><span>Cancel</span></button>
+                    </div>
+                    <div class="verticalSection" style="margin-top:2em">
+                        <h3 class="sectionTitle">Don't know its URL?</h3>
+                        <p class="fieldDescription">This lists quipclipper servers that advertise themselves on this server's network (quipclipper's <code>QC_ADVERTISE=1</code>). A Jellyfin in a container finds them only when it uses the host's network.</p>
+                        <button is="emby-button" type="button" id="QcFind" class="raised block"><span>Find on this network</span></button>
+                        <ul id="QcFound" class="paperList" style="list-style:none;margin:.5em 0;padding:.5em 1em" hidden></ul>
                     </div>
                 </div>
 
@@ -34,16 +44,16 @@
                             <span>Send changed subtitles to quipclipper</span>
                         </label>
                     </div>
-                    <div class="verticalSection">
-                        <h3 class="checkboxListLabel">Libraries to watch (none ticked: all)</h3>
+                    <fieldset class="verticalSection" style="border:0;margin:0;padding:0">
+                        <legend class="checkboxListLabel">Libraries to watch (none ticked: all)</legend>
                         <div id="QcLibraries" class="checkboxList paperList" style="padding:.5em 1em"></div>
-                    </div>
+                    </fieldset>
                     <p id="QcWatchStatus" class="fieldDescription"></p>
                     <button is="emby-button" type="button" id="QcSave" class="raised button-submit block"><span>Save</span></button>
                     <button is="emby-button" type="button" id="QcDisconnect" class="raised block"><span>Disconnect</span></button>
                 </div>
 
-                <p id="QcMessage" class="fieldDescription" style="color:var(--theme-text-color, inherit)"></p>
+                <p id="QcMessage" class="fieldDescription" role="status" aria-live="polite" style="color:var(--theme-text-color, inherit);overflow-wrap:anywhere"></p>
             </div>
         </div>
         <script type="text/javascript">
@@ -57,6 +67,7 @@
                     if (body !== undefined) { opts.data = JSON.stringify(body); opts.contentType = 'application/json'; }
                     return ApiClient.ajax(opts);
                 }
+                function field(o, name) { return o[name] !== undefined ? o[name] : o[name.charAt(0).toUpperCase() + name.slice(1)]; }
                 function say(text) { $('QcMessage').textContent = text || ''; }
                 function failed(err) {
                     var p = err && err.json ? err.json() : Promise.resolve(null);
@@ -64,14 +75,27 @@
                         say((body && body.detail) || ('Failed' + (err && err.status ? ' (' + err.status + ')' : '')));
                     });
                 }
+                // Jellyfin's own elements, so they get its look: jellyfin-web's custom-element
+                // polyfill upgrades them by their "is" attribute when they are inserted (it takes
+                // no createElement options).
+                function make(tag, is) {
+                    var el = document.createElement(tag);
+                    if (is) el.setAttribute('is', is);
+                    return el;
+                }
                 function stopPolling() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+                function showPairing(code) {
+                    $('QcCode').textContent = code || '';
+                    $('QcPairing').hidden = false;
+                }
                 function poll() {
                     api('GET', 'Pair').then(function (s) {
-                        if (s.Status === 'pending' || s.status === 'pending') { pollTimer = setTimeout(poll, 2000); return; }
+                        var status = field(s, 'status');
+                        if (status === 'pending') { showPairing(field(s, 'code')); pollTimer = setTimeout(poll, 2000); return; }
                         stopPolling();
                         $('QcPairing').hidden = true;
-                        var status = s.Status || s.status;
-                        say(s.Detail || s.detail || (status === 'connected' ? 'Connected.' : status === 'denied' ? 'quipclipper turned it down.' : 'The request expired; connect again.'));
+                        if (status === 'idle') return;
+                        say(field(s, 'detail') || (status === 'connected' ? 'Connected.' : status === 'denied' ? 'quipclipper turned it down.' : 'The request expired; connect again.'));
                         load();
                     }, function (err) { stopPolling(); $('QcPairing').hidden = true; failed(err); });
                 }
@@ -82,6 +106,9 @@
                     if (st.lastSend) parts.push('Last sent ' + new Date(st.lastSend.at).toLocaleString() + ': ' + st.lastSend.sent + ' files' + (st.lastSend.problem ? ' (' + st.lastSend.problem + ')' : '') + '.');
                     if (st.lastError) parts.push('Stopped: ' + st.lastError);
                     $('QcWatchStatus').textContent = parts.join(' ');
+                    var off = (st.features || []).filter(function (f) { return !f.on; });
+                    $('QcFeatures').hidden = off.length === 0;
+                    $('QcFeaturesOff').textContent = off.map(function (f) { return f.name + (f.reason ? ' (' + f.reason + ')' : ''); }).join('; ');
                 }
                 function load() {
                     Dashboard.showLoadingMsg();
@@ -89,7 +116,7 @@
                         var config = r[0], st = r[1], libs = r[2];
                         $('QcDisconnected').hidden = st.connected;
                         $('QcConnected').hidden = !st.connected;
-                        $('QcServerUrl').value = config.ServerUrl || '';
+                        if (!$('QcServerUrl').value) $('QcServerUrl').value = config.ServerUrl || '';
                         $('QcServerShown').textContent = config.ServerUrl || '';
                         $('QcScopes').textContent = (config.Scopes && config.Scopes.length) ? 'may ' + config.Scopes.join(', ') : 'full access';
                         $('QcWatch').checked = config.WatchSubtitles;
@@ -97,28 +124,62 @@
                         var box = $('QcLibraries');
                         box.innerHTML = '';
                         libs.forEach(function (lib) {
-                            var label = document.createElement('label');
-                            var input = document.createElement('input');
+                            var label = make('label');
+                            var input = make('input', 'emby-checkbox');
                             input.type = 'checkbox';
-                            input.setAttribute('is', 'emby-checkbox');
                             input.dataset.id = lib.id;
                             input.checked = picked.indexOf(lib.id) >= 0;
-                            var span = document.createElement('span');
+                            var span = make('span');
                             span.textContent = lib.name + ' (' + (lib.locations || []).join(', ') + ')';
                             label.appendChild(input);
                             label.appendChild(span);
                             box.appendChild(label);
                         });
                         showStatus(st);
+                        // A request still waiting (this page was closed, or is open twice): pick it up.
+                        if (!st.connected && !pollTimer) poll();
                     }).catch(failed).then(function () { Dashboard.hideLoadingMsg(); });
+                }
+                function showFound(servers) {
+                    var list = $('QcFound');
+                    list.innerHTML = '';
+                    list.hidden = servers.length === 0;
+                    servers.forEach(function (server) {
+                        var item = make('li');
+                        var name = make('p');
+                        name.textContent = server.name;
+                        name.style.margin = '.5em 0 .25em';
+                        item.appendChild(name);
+                        server.urls.forEach(function (url) {
+                            var use = make('button', 'emby-button');
+                            use.type = 'button';
+                            use.className = 'raised';
+                            use.textContent = 'Use ' + url;
+                            use.addEventListener('click', function () {
+                                $('QcServerUrl').value = url;
+                                say('Picked ' + url + ' (' + server.name + '). Connect pairs with it.');
+                                $('QcConnect').focus();
+                            });
+                            item.appendChild(use);
+                        });
+                        list.appendChild(item);
+                    });
                 }
                 page.addEventListener('pageshow', function () { say(''); load(); });
                 page.addEventListener('pagehide', stopPolling);
+                $('QcFind').addEventListener('click', function () {
+                    var button = $('QcFind');
+                    button.disabled = true;
+                    say('Looking on this server\'s network…');
+                    api('GET', 'Discover').then(function (r) {
+                        showFound(r.servers || []);
+                        say(r.problem || ((r.servers || []).length ? '' : 'No quipclipper answered on this server\'s network. Type its URL instead.'));
+                    }, failed).then(function () { button.disabled = false; });
+                });
                 $('QcConnect').addEventListener('click', function () {
                     say('');
                     api('POST', 'Pair', { ServerUrl: $('QcServerUrl').value }).then(function (s) {
-                        $('QcCode').textContent = s.Code || s.code;
-                        $('QcPairing').hidden = false;
+                        showPairing(field(s, 'code'));
                         stopPolling();
                         pollTimer = setTimeout(poll, 2000);
                     }, failed);

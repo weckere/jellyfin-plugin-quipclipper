@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Mime;
 using System.Threading;
@@ -8,12 +9,13 @@ using Jellyfin.Plugin.Quipclipper.Subtitles;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Quipclipper.Api;
 
 /// <summary>
-/// What the plugin's settings page calls: connect (pair), check on it, disconnect, and how
-/// the subtitle watcher is doing. Administrators only. The page never talks to quipclipper
+/// What the plugin's settings page calls: connect (pair), check on it, disconnect, find
+/// quipclipper on the LAN, and how the features are doing. Administrators only. The page never talks to quipclipper
 /// itself; Jellyfin does, so no CORS is involved.
 /// </summary>
 [ApiController]
@@ -26,6 +28,8 @@ public class QuipclipperController : ControllerBase
     private readonly SubtitleWatch _watch;
     private readonly IConfigStore _config;
     private readonly MediaBrowser.Controller.Library.ILibraryManager _libraryManager;
+    private readonly Discovery _discovery;
+    private readonly ILogger<QuipclipperController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QuipclipperController"/> class.
@@ -34,12 +38,16 @@ public class QuipclipperController : ControllerBase
     /// <param name="watch">The subtitle watcher.</param>
     /// <param name="config">The plugin's settings.</param>
     /// <param name="libraryManager">Jellyfin's library.</param>
-    public QuipclipperController(PairingService pairing, SubtitleWatch watch, IConfigStore config, MediaBrowser.Controller.Library.ILibraryManager libraryManager)
+    /// <param name="discovery">Finds quipclipper on the LAN.</param>
+    /// <param name="logger">The logger.</param>
+    public QuipclipperController(PairingService pairing, SubtitleWatch watch, IConfigStore config, MediaBrowser.Controller.Library.ILibraryManager libraryManager, Discovery discovery, ILogger<QuipclipperController> logger)
     {
         _pairing = pairing;
         _watch = watch;
         _config = config;
         _libraryManager = libraryManager;
+        _discovery = discovery;
+        _logger = logger;
     }
 
     /// <summary>Whether this server is connected to quipclipper, and how the subtitle watcher is doing.</summary>
@@ -64,7 +72,26 @@ public class QuipclipperController : ControllerBase
             pending = _watch.State.PendingCount,
             dropped = _watch.State.Dropped,
             lastSend = last is { } l ? new { at = l.At, sent = l.Outcome.Sent, refused = l.Outcome.Refused, problem = l.Outcome.Detail } : null,
+            features = Feature.All.Select(f => new { name = f.Name, on = f.IsOn, reason = f.Reason }).ToList(),
         };
+    }
+
+    /// <summary>Looks for quipclipper servers that advertise themselves on the LAN (<c>QC_ADVERTISE=1</c>), for the page to offer their URLs.</summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The servers found, and why none could be looked for.</returns>
+    [HttpGet("Discover")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<object>> Discover(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var servers = await _discovery.FindAsync(Discovery.Window, cancellationToken).ConfigureAwait(false);
+            return new { servers = servers.Select(s => new { name = s.Name, id = s.Id, urls = s.Urls }).ToList(), problem = (string?)null };
+        }
+        catch (System.Net.Sockets.SocketException ex)
+        {
+            return new { servers = Array.Empty<object>(), problem = "Couldn't look on the network: " + ex.Message };
+        }
     }
 
     /// <summary>Asks quipclipper for access; the reply's code shows in quipclipper's banner too.</summary>
@@ -137,7 +164,8 @@ public class QuipclipperController : ControllerBase
     [HttpGet("Libraries")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<object> Libraries()
-        => SubtitleWatcher.Libraries(_libraryManager).Select(l => new { id = l.Id, name = l.Name, locations = l.Locations }).ToList();
+        => Feature.SubtitleReindex.Run<IReadOnlyList<WatchedLibrary>>(_logger, () => SubtitleWatcher.Libraries(_libraryManager), [])
+            .Select(l => new { id = l.Id, name = l.Name, locations = l.Locations }).ToList();
 }
 
 /// <summary>Body of <c>POST /Quipclipper/Pair</c>.</summary>

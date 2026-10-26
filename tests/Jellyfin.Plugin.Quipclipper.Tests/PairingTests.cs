@@ -58,6 +58,48 @@ public class PairingTests
         Assert.False(_config.Current.Connected);
     }
 
+    [Fact]
+    public async Task Two_open_settings_pages_polling_the_same_request_both_see_it_connected()
+    {
+        await _pairing.StartAsync("http://quipclipper.test:8090", default);
+        _qc.Approve("req0");
+        _qc.PollGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = _pairing.PollAsync(default);
+        await _qc.PollEntered.Task;               // the first page's poll is at quipclipper
+        var second = _pairing.PollAsync(default); // the second page's waits for it
+        Assert.False(second.IsCompleted);
+        _qc.PollGate.SetResult();
+
+        Assert.Equal("connected", (await first).Status);
+        Assert.Equal("connected", (await second).Status); // not "expired": the token was handed out once, to the first
+        Assert.Single(_qc.Requests, r => r.Method == "GET");
+    }
+
+    [Fact]
+    public async Task An_allow_given_while_no_page_was_open_is_collected_by_the_next_page()
+    {
+        var clock = new ManualClock();
+        using var pairing = new PairingService(_config, _qc.Client, () => "wizfin", clock);
+        await pairing.StartAsync("http://quipclipper.test:8090", default);
+        // The page is closed; someone allows it in quipclipper; later the page opens again and asks.
+        _qc.Approve("req0");
+        clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal("connected", (await pairing.PollAsync(default)).Status);
+        Assert.True(_config.Current.Connected);
+    }
+
+    [Fact]
+    public async Task A_request_long_past_its_expiry_is_dropped_without_asking()
+    {
+        var clock = new ManualClock();
+        using var pairing = new PairingService(_config, _qc.Client, () => "wizfin", clock);
+        await pairing.StartAsync("http://quipclipper.test:8090", default);
+        clock.Advance(TimeSpan.FromSeconds(600) + PairingService.Linger);
+        Assert.Equal("expired", (await pairing.PollAsync(default)).Status);
+        Assert.Equal("idle", (await pairing.PollAsync(default)).Status);
+        Assert.DoesNotContain(_qc.Requests, r => r.Method == "GET");
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("quipclipper:8090")]

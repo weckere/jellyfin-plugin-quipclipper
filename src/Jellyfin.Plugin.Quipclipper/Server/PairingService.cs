@@ -9,16 +9,24 @@ namespace Jellyfin.Plugin.Quipclipper.Server;
 /// Connects this server to quipclipper by pairing (<c>quipclipper.pair/1</c>): asks for
 /// access with the plugin's scopes, hands the settings page the code to compare with
 /// quipclipper's banner, and keeps the token once a person allows it. Done server-side, so
-/// the browser never talks to quipclipper and no CORS is needed. One request at a time.
+/// the browser never talks to quipclipper and no CORS is needed. One request at a time, and
+/// one poll at a time: two open settings pages polling the same request get the same answer
+/// (the token is handed out once; a second poll racing the first would see it gone). The
+/// request outlives the page: the next page to open asks again, which collects an Allow
+/// given meanwhile (quipclipper drops an approval nobody collects, and its client with it).
 /// </summary>
-public sealed class PairingService
+public sealed class PairingService : IDisposable
 {
     private readonly IConfigStore _config;
     private readonly Func<QuipclipperClient> _client;
     private readonly Func<string> _serverName;
     private readonly TimeProvider _time;
     private readonly object _lock = new();
+    private readonly SemaphoreSlim _polling = new(1, 1);
     private Pending? _pending;
+
+    /// <summary>How long after a request expires quipclipper still answers for it (its <c>LINGER</c>): an Allow given just before expiry can be collected until then.</summary>
+    public static readonly TimeSpan Linger = TimeSpan.FromSeconds(60);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PairingService"/> class.
@@ -45,7 +53,7 @@ public sealed class PairingService
     {
         var server = QuipclipperClient.ParseServer(serverUrl)
                      ?? throw new ArgumentException("Enter quipclipper's URL, like http://quipclipper:8080.", nameof(serverUrl));
-        var host = (_serverName() ?? string.Empty).Trim();
+        var host = (ServerName() ?? string.Empty).Trim();
         host = host.Length > 100 ? host[..100] : host;
         var started = await _client().StartPairAsync(server, "Jellyfin", host, cancellationToken).ConfigureAwait(false);
         var pending = new Pending(server, started.Id, started.PollSecret, started.Code,
@@ -64,6 +72,19 @@ public sealed class PairingService
     /// <exception cref="QuipclipperException">quipclipper couldn't be reached.</exception>
     public async Task<PairingState> PollAsync(CancellationToken cancellationToken)
     {
+        await _polling.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await PollOnceAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _polling.Release();
+        }
+    }
+
+    private async Task<PairingState> PollOnceAsync(CancellationToken cancellationToken)
+    {
         Pending? pending;
         lock (_lock)
         {
@@ -73,6 +94,12 @@ public sealed class PairingService
         if (pending is null)
         {
             return _config.Current.Connected ? PairingState.Of("connected") : PairingState.Of("idle");
+        }
+
+        if (_time.GetUtcNow() >= pending.ExpiresAt + Linger)
+        {
+            Clear(pending); // long gone at quipclipper too
+            return PairingState.Of("expired");
         }
 
         var poll = await _client().PollPairAsync(pending.Server, pending.Id, pending.PollSecret, cancellationToken).ConfigureAwait(false);
@@ -145,6 +172,22 @@ public sealed class PairingService
         _config.Save(config);
         return problem;
     }
+
+    // Only the banner's label: a Jellyfin that can't say its name pairs without one.
+    private string? ServerName()
+    {
+        try
+        {
+            return _serverName();
+        }
+        catch (Exception ex) when (Feature.IsMismatch(ex))
+        {
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => _polling.Dispose();
 
     private void Clear(Pending pending)
     {

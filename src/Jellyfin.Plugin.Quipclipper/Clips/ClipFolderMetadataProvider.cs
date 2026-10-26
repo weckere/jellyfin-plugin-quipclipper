@@ -16,15 +16,24 @@ namespace Jellyfin.Plugin.Quipclipper.Clips;
 public class ClipFolderMetadataProvider : ILocalMetadataProvider<Folder>, IHasItemChangeMonitor
 {
     private readonly ILogger<ClipFolderMetadataProvider> _logger;
+    private readonly Feature _feature;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ClipFolderMetadataProvider"/> class.
     /// </summary>
     /// <param name="logger">The logger.</param>
     public ClipFolderMetadataProvider(ILogger<ClipFolderMetadataProvider> logger)
+        : this(logger, Feature.ClipMetadata)
+    {
+    }
+
+    internal ClipFolderMetadataProvider(ILogger<ClipFolderMetadataProvider> logger, Feature feature)
     {
         _logger = logger;
+        _feature = feature;
     }
+
+    internal Feature Feature => _feature;
 
     /// <inheritdoc />
     public string Name => "quipclipper";
@@ -33,17 +42,29 @@ public class ClipFolderMetadataProvider : ILocalMetadataProvider<Folder>, IHasIt
     public Task<MetadataResult<Folder>> GetMetadata(ItemInfo info, IDirectoryService directoryService, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(info);
+        return Task.FromResult(_feature.Run(_logger, () => Read(info, directoryService), new MetadataResult<Folder>()));
+    }
+
+    /// <inheritdoc />
+    public bool HasChanged(BaseItem item, IDirectoryService directoryService)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return _feature.Run(_logger, () => Changed(item, directoryService), false);
+    }
+
+    private MetadataResult<Folder> Read(ItemInfo info, IDirectoryService directoryService)
+    {
         var result = new MetadataResult<Folder>();
         if (info.ItemType != typeof(Folder) || string.IsNullOrEmpty(info.Path))
         {
-            return Task.FromResult(result);
+            return result;
         }
 
         try
         {
             if (FolderDetails.From(Sidecars.In(info.Path, directoryService)) is not { } details)
             {
-                return Task.FromResult(result);
+                return result;
             }
 
             result.Item = new Folder
@@ -54,25 +75,23 @@ public class ClipFolderMetadataProvider : ILocalMetadataProvider<Folder>, IHasIt
             };
             result.HasMetadata = true;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException && !Feature.IsMismatch(ex))
         {
             Log.MetadataFailed(_logger, ex, info.Path);
             result = new MetadataResult<Folder>();
         }
 
-        return Task.FromResult(result);
+        return result;
     }
 
-    /// <inheritdoc />
-    public bool HasChanged(BaseItem item, IDirectoryService directoryService)
+    private bool Changed(BaseItem item, IDirectoryService directoryService)
     {
-        ArgumentNullException.ThrowIfNull(item);
         try
         {
             return item.GetType() == typeof(Folder) && Sidecars.Handles(item)
                    && Sidecars.FilesIn(item.Path, directoryService).Any(f => Sidecars.NewerThan(f, item));
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException && !Feature.IsMismatch(ex))
         {
             Log.ChangeCheckFailed(_logger, ex, item.Path);
             return false;

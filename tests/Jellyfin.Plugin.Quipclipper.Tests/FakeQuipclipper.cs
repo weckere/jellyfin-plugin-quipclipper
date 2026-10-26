@@ -21,6 +21,12 @@ internal sealed class FakeQuipclipper : HttpMessageHandler
     /// <summary>What POST /api/index/file answers, in turn; 202 when the list runs out.</summary>
     public Queue<HttpStatusCode> IndexAnswers { get; } = new();
 
+    /// <summary>When set, a pairing poll waits for it (after setting <see cref="PollEntered"/>): a poll still in flight.</summary>
+    public TaskCompletionSource? PollGate { get; set; }
+
+    /// <summary>Set once a poll is held by <see cref="PollGate"/>.</summary>
+    public TaskCompletionSource PollEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     /// <summary>When set, every request fails as if quipclipper were down.</summary>
     public bool Down { get; set; }
 
@@ -67,6 +73,12 @@ internal sealed class FakeQuipclipper : HttpMessageHandler
                 Pairs[id] = ("secret-" + id, "pending");
                 return Json(HttpStatusCode.OK, new { id, code = "7F3K", poll_secret = "secret-" + id, expires_in = 600 });
             case ("GET", _) when path.StartsWith("/api/pair/", StringComparison.Ordinal):
+                if (PollGate is { } gate)
+                {
+                    PollEntered.TrySetResult();
+                    await gate.Task;
+                }
+
                 var rid = path["/api/pair/".Length..];
                 if (!Pairs.TryGetValue(rid, out var pair) || headers.GetValueOrDefault("X-Pair-Secret") != pair.Secret)
                 {

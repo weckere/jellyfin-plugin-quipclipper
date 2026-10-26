@@ -18,15 +18,24 @@ namespace Jellyfin.Plugin.Quipclipper.Clips;
 public class ClipMetadataProvider : ILocalMetadataProvider<Video>, IHasItemChangeMonitor
 {
     private readonly ILogger<ClipMetadataProvider> _logger;
+    private readonly Feature _feature;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ClipMetadataProvider"/> class.
     /// </summary>
     /// <param name="logger">The logger.</param>
     public ClipMetadataProvider(ILogger<ClipMetadataProvider> logger)
+        : this(logger, Feature.ClipMetadata)
+    {
+    }
+
+    internal ClipMetadataProvider(ILogger<ClipMetadataProvider> logger, Feature feature)
     {
         _logger = logger;
+        _feature = feature;
     }
+
+    internal Feature Feature => _feature;
 
     /// <inheritdoc />
     public string Name => "quipclipper";
@@ -35,17 +44,29 @@ public class ClipMetadataProvider : ILocalMetadataProvider<Video>, IHasItemChang
     public Task<MetadataResult<Video>> GetMetadata(ItemInfo info, IDirectoryService directoryService, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(info);
+        return Task.FromResult(_feature.Run(_logger, () => Read(info, directoryService), new MetadataResult<Video>()));
+    }
+
+    /// <inheritdoc />
+    public bool HasChanged(BaseItem item, IDirectoryService directoryService)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return _feature.Run(_logger, () => Changed(item, directoryService), false);
+    }
+
+    private MetadataResult<Video> Read(ItemInfo info, IDirectoryService directoryService)
+    {
         var result = new MetadataResult<Video>();
         if (info.ItemType != typeof(Video) || string.IsNullOrEmpty(info.Path))
         {
-            return Task.FromResult(result);
+            return result;
         }
 
         try
         {
             if (Sidecars.ForClip(info.Path, directoryService) is not { } sidecar)
             {
-                return Task.FromResult(result);
+                return result;
             }
 
             var details = ClipDetails.From(sidecar, Path.GetFileNameWithoutExtension(info.Path));
@@ -59,27 +80,25 @@ public class ClipMetadataProvider : ILocalMetadataProvider<Video>, IHasItemChang
             };
             result.HasMetadata = true;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException && !Feature.IsMismatch(ex))
         {
             // Never fail a library scan over one clip: fall back to Jellyfin's defaults.
             Log.MetadataFailed(_logger, ex, info.Path);
             result = new MetadataResult<Video>();
         }
 
-        return Task.FromResult(result);
+        return result;
     }
 
-    /// <inheritdoc />
-    public bool HasChanged(BaseItem item, IDirectoryService directoryService)
+    private bool Changed(BaseItem item, IDirectoryService directoryService)
     {
-        ArgumentNullException.ThrowIfNull(item);
         try
         {
             return item.GetType() == typeof(Video) && Sidecars.Handles(item)
                    && Sidecars.FileFor(item.Path, directoryService) is { } file
                    && Sidecars.NewerThan(file, item);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException && !Feature.IsMismatch(ex))
         {
             Log.ChangeCheckFailed(_logger, ex, item.Path);
             return false;

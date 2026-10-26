@@ -225,4 +225,35 @@ public sealed class TranscriptProviderTests : IDisposable
         Assert.True(TranscriptSubtitleProvider.HasMachineSidecar(_episode));
         Assert.Empty(await _provider.Search(Manual(), default));
     }
+
+    [Fact]
+    public async Task A_pick_saved_in_Jellyfins_metadata_folder_counts_too()
+    {
+        // "Save subtitles with media" off: Jellyfin saved the pick in its own folder for the item.
+        var metadata = Path.Combine(_dir.Path, "jellyfin-metadata", "library", "ab", "abcdef");
+        _dir.File("jellyfin-metadata/library/ab/abcdef/Darkplace - S01E06.en.whisper.srt", "x");
+        var asked = new List<string>();
+        var provider = new TranscriptSubtitleProvider(_config, _qc.Client, NullLogger<TranscriptSubtitleProvider>.Instance, path =>
+        {
+            asked.Add(path);
+            return metadata;
+        });
+        var id = TranscriptSubtitleProvider.MakeId("all", "en", _episode, FakeQuipclipper.Token);
+
+        Assert.Empty(await provider.Search(Manual(), default));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.GetSubtitles(id, default));
+        Assert.Contains("has a machine transcript already", ex.Message);
+        Assert.Equal([_episode, _episode], asked);
+        Assert.Empty(_qc.TranscriptQueries);
+    }
+
+    [Fact]
+    public async Task A_metadata_folder_Jellyfin_cant_name_is_no_reason_to_offer_nothing()
+    {
+        var provider = new TranscriptSubtitleProvider(_config, _qc.Client, NullLogger<TranscriptSubtitleProvider>.Instance,
+            _ => throw new InvalidOperationException("the database is busy"));
+        Assert.Equal(2, (await provider.Search(Manual(), default)).Count());
+        var none = new TranscriptSubtitleProvider(_config, _qc.Client, NullLogger<TranscriptSubtitleProvider>.Instance, _ => null);
+        Assert.Equal(2, (await none.Search(Manual(), default)).Count());
+    }
 }
