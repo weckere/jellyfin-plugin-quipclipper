@@ -68,7 +68,7 @@ m = re.search(r"^## \[Unreleased\]\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
 if not m or not m.group(1).strip():
     sys.exit("release: CHANGELOG.md's Unreleased section is empty: nothing to release")
 head = f"## [Unreleased]\n\n## [{version}] - {today}\n\n{m.group(1).strip()}\n\n"
-open("CHANGELOG.md", "w").write(text[:m.start()] + head + text[m.end():])
+open("CHANGELOG.md", "w").write((text[:m.start()] + head + text[m.end():]).rstrip("\n") + "\n")
 PY
 
 grep -q "<Version>$version</Version>" Directory.Build.props || die "failed to bump Directory.Build.props"
