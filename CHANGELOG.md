@@ -9,6 +9,8 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+## [0.1.0.0] - 2026-10-25
+
 ### Clip metadata (quipclipper M22, Phase 1)
 
 - **Clips show their line.** In a library pointed at quipclipper's clips folder, each clip
