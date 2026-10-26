@@ -9,6 +9,8 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+## [0.2.0.0] - 2026-10-25
+
 ### Re-index changed subtitles (quipclipper M22, Phase 2)
 
 - **Subtitles Jellyfin brings in become searchable in quipclipper within a minute.** A
