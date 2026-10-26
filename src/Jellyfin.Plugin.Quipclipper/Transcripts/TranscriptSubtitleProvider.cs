@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -32,6 +33,10 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
     /// <summary>The token quipclipper's machine sidecars carry: <c>&lt;stem&gt;.&lt;lang&gt;.whisper.srt</c>.</summary>
     public const string SidecarToken = "whisper";
 
+    /// <summary>How long one call to quipclipper may take: a file whose subtitles aren't cached yet has them extracted first.</summary>
+    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+
+    private static readonly EnumerationOptions AnyCase = new() { MatchCasing = MatchCasing.CaseInsensitive, IgnoreInaccessible = true };
     private static readonly VideoContentType[] MediaTypes = [VideoContentType.Movie, VideoContentType.Episode];
     private readonly IConfigStore _config;
     private readonly Func<QuipclipperClient> _client;
@@ -79,7 +84,7 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         try
         {
-            return Directory.EnumerateFiles(dir, "*." + SidecarToken + ".*").Any(f => own.IsMatch(Path.GetFileName(f)));
+            return Directory.EnumerateFiles(dir, "*." + SidecarToken + ".*", AnyCase).Any(f => own.IsMatch(Path.GetFileName(f)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -110,13 +115,14 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
 
             var info = await _client().GetTranscriptAsync(server, config.Token, path, "machine", cancellationToken).ConfigureAwait(false);
             var stored = info?.Stored;
+            var lang = Language(stored?.Language);
             if (info is null || stored is null || stored.Lines == 0 || info.Library.Count > 0
-                || !LanguageMatches(stored.Language, request))
+                || lang is null || !string.Equals(request.TwoLetterISOLanguageName, lang, StringComparison.OrdinalIgnoreCase))
             {
                 return [];
             }
 
-            return Results(request, path, stored, info.Lines.Count);
+            return Results(request, path, stored, lang, info.Lines.Count, config.Token);
         }
         catch (QuipclipperException ex)
         {
@@ -135,18 +141,19 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
     {
         // Jellyfin shows the message of what this throws: a download that can't be served
         // fails rather than saving an empty or misnamed file.
-        var (lines, language, path) = ParseId(id)
-            ?? throw new ArgumentException("Not a quipclipper machine transcript id.", nameof(id));
-        if (HasMachineSidecar(path))
-        {
-            throw new InvalidOperationException("A machine transcript is beside this file already.");
-        }
-
         var config = _config.Current;
         var server = config.Connected ? QuipclipperClient.ParseServer(config.ServerUrl) : null;
         if (server is null)
         {
             throw new InvalidOperationException("The quipclipper plugin isn't connected to quipclipper.");
+        }
+
+        // Signed with the token: an id made up by hand can't name another file's path.
+        var (lines, language, path) = ParseId(id, config.Token)
+            ?? throw new ArgumentException("Not a quipclipper machine transcript id from this server.", nameof(id));
+        if (HasMachineSidecar(path))
+        {
+            throw new InvalidOperationException("A machine transcript is beside this file already.");
         }
 
         var srt = await _client().GetTranscriptSrtAsync(server, config.Token, path, lines, cancellationToken).ConfigureAwait(false);
@@ -161,22 +168,27 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
         };
     }
 
-    /// <summary>A result's id: which lines, the transcript's language and the media path (base64url, so it is safe in Jellyfin's URL).</summary>
+    /// <summary>A result's id: which lines, the transcript's language and the media path (base64url, so it is safe in Jellyfin's URL), signed with <paramref name="key"/>.</summary>
     /// <param name="lines"><c>machine</c> or <c>all</c>.</param>
-    /// <param name="language">Two letters.</param>
+    /// <param name="language">Two or three letters.</param>
     /// <param name="mediaPath">The media file.</param>
+    /// <param name="key">The signing key (the client token).</param>
     /// <returns>The id.</returns>
-    public static string MakeId(string lines, string language, string mediaPath) =>
-        (lines == "all" ? "a" : "m") + "." + language + "." + Convert.ToBase64String(Encoding.UTF8.GetBytes(mediaPath))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    public static string MakeId(string lines, string language, string mediaPath, string key)
+    {
+        var head = (lines == "all" ? "a" : "m") + "." + language + "." + Base64Url(Encoding.UTF8.GetBytes(mediaPath));
+        return head + "." + Signature(head, key);
+    }
 
-    /// <summary>Reads an id <see cref="MakeId"/> made.</summary>
+    /// <summary>Reads an id <see cref="MakeId"/> made with the same key.</summary>
     /// <param name="id">The id.</param>
-    /// <returns>Its lines, language and path; null when it isn't one.</returns>
-    public static (string Lines, string Language, string Path)? ParseId(string? id)
+    /// <param name="key">The signing key (the client token).</param>
+    /// <returns>Its lines, language and path; null when it isn't one, or wasn't signed with this key.</returns>
+    public static (string Lines, string Language, string Path)? ParseId(string? id, string key)
     {
         var m = IdPattern().Match(id ?? string.Empty);
-        if (!m.Success)
+        if (!m.Success || !CryptographicOperations.FixedTimeEquals(
+                Encoding.ASCII.GetBytes(m.Groups[4].Value), Encoding.ASCII.GetBytes(Signature(m.Groups[1].Value, key))))
         {
             return null;
         }
@@ -188,7 +200,7 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
             var path = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
             return path.Length == 0 || path.Contains('\0', StringComparison.Ordinal)
                 ? null
-                : (m.Groups[1].Value == "a" ? "all" : "machine", m.Groups[2].Value, path);
+                : (m.Groups[2].Value == "a" ? "all" : "machine", m.Groups[1].Value.Split('.')[1], path);
         }
         catch (FormatException)
         {
@@ -196,13 +208,22 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
         }
     }
 
-    private static bool LanguageMatches(string language, SubtitleSearchRequest request) =>
-        string.Equals(request.TwoLetterISOLanguageName, language, StringComparison.OrdinalIgnoreCase);
-
-    private static List<RemoteSubtitleInfo> Results(SubtitleSearchRequest request, string path, StoredTranscript stored, int machineLines)
+    /// <summary>A transcript's language as two or three letters (<c>en-US</c> → <c>en</c>); null when it names none (<c>auto</c>, missing).</summary>
+    /// <param name="language">quipclipper's <c>language</c>.</param>
+    /// <returns>The letters, or null.</returns>
+    public static string? Language(string? language)
     {
-        var lang = Regex.Replace(stored.Language.ToLowerInvariant(), "[^a-z]", string.Empty);
-        lang = lang.Length is >= 2 and <= 3 ? lang : "en";
+        var head = (language ?? string.Empty).Split('-', '_')[0].ToLowerInvariant();
+        return head.Length is >= 2 and <= 3 && head.All(c => c is >= 'a' and <= 'z') ? head : null;
+    }
+
+    private static string Base64Url(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static string Signature(string head, string key) =>
+        Base64Url(HMACSHA256.HashData(Encoding.UTF8.GetBytes(key), Encoding.UTF8.GetBytes(head))[..16]);
+
+    private static List<RemoteSubtitleInfo> Results(SubtitleSearchRequest request, string path, StoredTranscript stored, string lang, int machineLines, string key)
+    {
         var heard = Heard(stored.Covered, request.RuntimeTicks);
         var models = stored.Models.Count > 0 ? string.Join(", ", stored.Models) : "whisper";
         var comment = "Machine transcript (" + models + "), not subtitles: saved as "
@@ -220,7 +241,7 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
 
         RemoteSubtitleInfo Result(string lines, string title, int count) => new()
         {
-            Id = MakeId(lines, lang, path),
+            Id = MakeId(lines, lang, path, key),
             ProviderName = ProviderName,
             Name = string.Create(CultureInfo.InvariantCulture, $"{title} ({models}, {heard}, {count} lines)"),
             ThreeLetterISOLanguageName = request.Language,
@@ -248,6 +269,7 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
             : string.Create(CultureInfo.InvariantCulture, $"{t.Minutes}:{t.Seconds:00}");
     }
 
-    [GeneratedRegex("^([ma])\\.([a-z]{2,3})\\.([A-Za-z0-9_-]+)$", RegexOptions.CultureInvariant)]
+    // Group 1: the signed head; 2: lines; 3: the path, base64url; 4: the signature.
+    [GeneratedRegex("^(([ma])\\.[a-z]{2,3}\\.([A-Za-z0-9_-]+))\\.([A-Za-z0-9_-]{22})$", RegexOptions.CultureInvariant)]
     private static partial Regex IdPattern();
 }

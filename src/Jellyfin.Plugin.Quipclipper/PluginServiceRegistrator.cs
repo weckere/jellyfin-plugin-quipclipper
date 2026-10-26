@@ -54,6 +54,13 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
                 sp.GetRequiredService<ILogger<SubtitleWatch>>());
         });
         serviceCollection.AddHostedService<SubtitleWatcher>();
-        serviceCollection.AddSingleton<ISubtitleProvider, TranscriptSubtitleProvider>();
+        serviceCollection.AddSingleton<ISubtitleProvider>(sp =>
+        {
+            var factory = sp.GetRequiredService<System.Net.Http.IHttpClientFactory>();
+            return new TranscriptSubtitleProvider(
+                sp.GetRequiredService<IConfigStore>(),
+                () => new QuipclipperClient(factory.CreateClient(NamedClient.Default), TranscriptSubtitleProvider.Timeout),
+                sp.GetRequiredService<ILogger<TranscriptSubtitleProvider>>());
+        });
     }
 }

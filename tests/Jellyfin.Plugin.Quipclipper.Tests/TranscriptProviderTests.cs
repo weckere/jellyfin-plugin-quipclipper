@@ -163,7 +163,7 @@ public sealed class TranscriptProviderTests : IDisposable
     {
         var id = (await _provider.Search(Manual(), default)).First().Id;
         await Assert.ThrowsAsync<ArgumentException>(() => _provider.GetSubtitles("m.en.!!", default));
-        await Assert.ThrowsAsync<ArgumentException>(() => _provider.GetSubtitles("x.en.YQ", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => _provider.GetSubtitles("x" + id[1..], default));
 
         _dir.File("Darkplace/Season 01/Darkplace - S01E06.en.whisper.srt", "x"); // saved meanwhile
         await Assert.ThrowsAsync<InvalidOperationException>(() => _provider.GetSubtitles(id, default));
@@ -179,11 +179,50 @@ public sealed class TranscriptProviderTests : IDisposable
     [InlineData("/movies/Amélie (2001)/Amélie ?+&=#%.mkv")]
     public void An_id_round_trips_and_is_safe_in_a_url(string path)
     {
-        var id = TranscriptSubtitleProvider.MakeId("all", "en", path);
+        var id = TranscriptSubtitleProvider.MakeId("all", "en", path, "key");
         Assert.Matches("^[A-Za-z0-9._-]+$", id);
-        Assert.Equal(("all", "en", path), TranscriptSubtitleProvider.ParseId(id));
-        Assert.Equal(("machine", "en", path), TranscriptSubtitleProvider.ParseId(TranscriptSubtitleProvider.MakeId("machine", "en", path)));
-        Assert.Null(TranscriptSubtitleProvider.ParseId(null));
-        Assert.Null(TranscriptSubtitleProvider.ParseId("m.english.YQ"));
+        Assert.Equal(("all", "en", path), TranscriptSubtitleProvider.ParseId(id, "key"));
+        Assert.Equal(("machine", "en", path), TranscriptSubtitleProvider.ParseId(TranscriptSubtitleProvider.MakeId("machine", "en", path, "key"), "key"));
+        Assert.Null(TranscriptSubtitleProvider.ParseId(null, "key"));
+        Assert.Null(TranscriptSubtitleProvider.ParseId("m.english.YQ", "key"));
+    }
+
+    [Fact]
+    public async Task An_id_made_up_for_another_file_is_refused()
+    {
+        // Jellyfin's download takes any id; a hand-made one could name any file quipclipper has (review).
+        var other = _dir.File("Private/secret.mkv", string.Empty);
+        _qc.Transcripts[other] = new FakeTranscript((10, ["small.en"], "en"), ["secret"], ["secret"], []);
+        var real = TranscriptSubtitleProvider.MakeId("all", "en", other, FakeQuipclipper.Token);
+        Assert.Null(TranscriptSubtitleProvider.ParseId(TranscriptSubtitleProvider.MakeId("all", "en", other, "another key"), FakeQuipclipper.Token));
+        var forged = real[..real.LastIndexOf('.')] + ".AAAAAAAAAAAAAAAAAAAAAA";
+        await Assert.ThrowsAsync<ArgumentException>(() => _provider.GetSubtitles(forged, default));
+        var swapped = "m" + real[1..]; // the lines changed, the signature kept
+        await Assert.ThrowsAsync<ArgumentException>(() => _provider.GetSubtitles(swapped, default));
+        Assert.Empty(_qc.TranscriptQueries);
+    }
+
+    [Theory]
+    [InlineData("en-US", "en")]
+    [InlineData("EN", "en")]
+    [InlineData("auto", null)]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    public void The_transcripts_language_is_read_as_letters(string? stored, string? want) =>
+        Assert.Equal(want, TranscriptSubtitleProvider.Language(stored));
+
+    [Fact]
+    public async Task A_transcript_in_no_named_language_gets_nothing()
+    {
+        _qc.Transcripts[_episode] = _qc.Transcripts[_episode] with { Stored = (1325.5, ["small.en"], "auto") };
+        Assert.Empty(await _provider.Search(Manual(), default));
+    }
+
+    [Fact]
+    public async Task A_sidecar_named_in_capitals_counts_too()
+    {
+        _dir.File("Darkplace/Season 01/Darkplace - S01E06.EN.WHISPER.SRT", "x");
+        Assert.True(TranscriptSubtitleProvider.HasMachineSidecar(_episode));
+        Assert.Empty(await _provider.Search(Manual(), default));
     }
 }

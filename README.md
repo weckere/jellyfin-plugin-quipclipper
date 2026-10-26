@@ -115,7 +115,12 @@ for Video and Folder (and above *Screen Grabber*).
 - A pick downloads `fmt=srt` (`lines=machine` or `all`) and answers with language
   `en.whisper`. Jellyfin 12.x names the saved file `<stem>.<language>.srt` as given, so it
   lands as `<stem>.en.whisper.srt`. A pick that can't be served fails in the dialog rather
-  than saving something wrong.
+  than saving something wrong. The ids it hands Jellyfin are signed with its key, so a
+  download can only fetch a file a search offered.
+- **The file lands beside the media only when Jellyfin saves subtitles there** (*Save
+  subtitles with media*, on by default) **and may write to that folder.** Otherwise Jellyfin
+  keeps it in its own metadata folder, where quipclipper doesn't see it and the plugin
+  doesn't notice it, so the item keeps being offered.
 
 ## Build and test
 

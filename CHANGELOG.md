@@ -9,6 +9,15 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+### Fixed
+
+- The transcript provider's result ids are signed with the plugin's key: a download request
+  with an id made up by hand can't fetch another file's transcript.
+- Calls for a transcript wait up to 30 s (was 10 s), for a file whose subtitles quipclipper
+  hasn't extracted yet; a transcript language such as `en-US` counts as `en`, and one with
+  none (`auto`) is not offered; a sidecar named in capitals (`.EN.WHISPER.SRT`) counts on
+  Linux too.
+
 ## [0.3.0.0] - 2026-10-25
 
 ### Machine transcripts as a subtitle source (quipclipper M22, Phase 3)

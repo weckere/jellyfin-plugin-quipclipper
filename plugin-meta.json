@@ -1,8 +1,8 @@
 {
   "guid": "6b6ea665-479b-4209-9ab3-a5e2a42275df",
   "name": "quipclipper",
-  "overview": "quipclipper's clips, named by their line; subtitles re-indexed as Jellyfin gets them",
-  "description": "Shows the clips quipclipper cuts by their line instead of their file name, with the source episode's still or the movie's poster, an overview of where and when the line is from, the show as a tag, and the day it was cut. It reads the metadata sidecar quipclipper writes beside every clip: no network, no account. Point a Home Videos library at quipclipper's clips folder. Connected to quipclipper (pairing, from the plugin's page), it also tells quipclipper whenever Jellyfin downloads a subtitle or notices one dropped into a library, so that file is searchable there within a minute. https://github.com/weckere/jellyfin-plugin-quipclipper",
+  "overview": "quipclipper's clips, named by their line; subtitles re-indexed as Jellyfin gets them; machine transcripts in subtitle search",
+  "description": "Shows the clips quipclipper cuts by their line instead of their file name, with the source episode's still or the movie's poster, an overview of where and when the line is from, the show as a tag, and the day it was cut. It reads the metadata sidecar quipclipper writes beside every clip: no network, no account. Point a Home Videos library at quipclipper's clips folder. Connected to quipclipper (pairing, from the plugin's page), it also tells quipclipper whenever Jellyfin downloads a subtitle or notices one dropped into a library, so that file is searchable there within a minute, and offers quipclipper's machine transcripts in Jellyfin's subtitle search (saved as <name>.en.whisper.srt, manual searches only). https://github.com/weckere/jellyfin-plugin-quipclipper",
   "owner": "weckere",
   "category": "Metadata",
   "targetAbi": "12.0.0.0",
