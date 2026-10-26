@@ -9,6 +9,8 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+## [0.4.0.0] - 2026-10-26
+
 ### Hardening and discovery (quipclipper M22, Phase 4)
 
 - **A Jellyfin the plugin wasn't built for turns one feature off, not a scan.** Clip
