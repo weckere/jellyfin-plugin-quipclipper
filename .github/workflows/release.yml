@@ -1,0 +1,112 @@
+name: Release
+
+# scripts/release.sh X.Y.Z.W pushes the tag vX.Y.Z.W. This runs CI on it, builds the
+# plugin, attaches jellyfin-plugin-quipclipper_X.Y.Z.W.zip (the DLL with meta.json) and
+# version.json (its manifest entry, with the zip's MD5) to a GitHub Release whose notes are
+# the version's CHANGELOG.md section, then rebuilds the repository manifest from every
+# release and publishes it on GitHub Pages:
+#   https://weckere.github.io/jellyfin-plugin-quipclipper/manifest.json
+# Run it by hand (workflow_dispatch) to republish the manifest alone.
+on:
+  push:
+    tags: ["v*.*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag matches Directory.Build.props and the changelog has its section
+        id: version
+        run: |
+          version=$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' Directory.Build.props | head -n1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME but Directory.Build.props says $version"
+            exit 1
+          fi
+          grep -q "^## \[$version\] - " CHANGELOG.md || {
+            echo "::error::CHANGELOG.md has no dated section for $version"
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  ci:
+    needs: check
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: [check, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: dotnet publish src/Jellyfin.Plugin.Quipclipper --configuration Release --output build
+
+      - name: Package
+        run: python3 scripts/package.py "$VERSION" build dist
+
+      - name: GitHub Release
+        run: |
+          python3 - "$VERSION" > notes.md <<'PY'
+          import json, sys
+          print(json.load(open("dist/version.json"))["changelog"])
+          PY
+          gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file notes.md \
+            "dist/jellyfin-plugin-quipclipper_$VERSION.zip" dist/version.json
+
+  pages:
+    needs: release
+    if: always() && (needs.release.result == 'success' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Manifest from every release
+        run: |
+          mkdir -p releases site
+          for tag in $(gh release list --limit 200 --json tagName,isDraft,isPrerelease \
+                         --jq '.[] | select(.isDraft | not) | select(.isPrerelease | not) | .tagName'); do
+            gh release download "$tag" --pattern version.json --dir "releases/$tag"
+          done
+          python3 scripts/manifest.py releases > site/manifest.json
+          cat site/manifest.json
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,47 @@
+{
+ "schema": "quipclipper.clip-meta",
+ "version": 1,
+ "file": "00-40-20_Winter_sure_is_long_isn't_it_Bambi_1942.mp4",
+ "kind": "video",
+ "origin": "clip",
+ "source": {
+  "path": "/media/Bambi.1942.1080p.BluRay.DTS-ES.x264-DON.mkv",
+  "name": "Bambi (1942)",
+  "url": null
+ },
+ "line": {
+  "start": 2419.819,
+  "end": 2428.258
+ },
+ "clip": {
+  "start": 2419.819,
+  "end": 2432.805
+ },
+ "padding": {
+  "before": 0.0,
+  "after": 4.547
+ },
+ "trim": {
+  "start": 0.0,
+  "end": 8.439
+ },
+ "cue": "Winter sure is long, isn't it?",
+ "lossless": false,
+ "audio_format": null,
+ "jellyfin": {
+  "id": "ef394fcc710e09ad08c703a98ac26d94",
+  "type": "Movie",
+  "show": "Bambi",
+  "season": null,
+  "episode": null,
+  "title": "Bambi",
+  "year": 1942
+ },
+ "codec": "aac",
+ "channels": 7,
+ "sample_rate": 48000,
+ "video_codec": "h264",
+ "duration": 13.013,
+ "size": 2372558,
+ "created": "2026-10-24T05:35:17Z"
+}

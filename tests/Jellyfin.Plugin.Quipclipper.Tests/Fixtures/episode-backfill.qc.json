@@ -1,0 +1,42 @@
+{
+ "schema": "quipclipper.clip-meta",
+ "version": 1,
+ "file": "00-00-46_No_it_doesn't_really_matter_Crank_Yankers.mp4",
+ "kind": "video",
+ "origin": "backfill",
+ "backfilled": true,
+ "created": "2026-06-21T10:33:31Z",
+ "size": 279895,
+ "source": {
+  "path": "/media/Crank.Yankers.S01E01.DVDrip.XviD-RockNonStop.avi",
+  "name": "Crank Yankers",
+  "stem": "Crank.Yankers.S01E01.DVDrip.XviD-RockNonStop"
+ },
+ "cue": "No it doesn't really matter",
+ "clip": {
+  "start": 46.0,
+  "end": null
+ },
+ "parsed": {
+  "season": 1,
+  "episode": 1,
+  "year": null
+ },
+ "codec": "aac",
+ "channels": 2,
+ "sample_rate": 48000,
+ "video_codec": "h264",
+ "duration": 1.739,
+ "jellyfin": {
+  "id": "efddad91d03484dcaf5d941d31f6ff3a",
+  "type": "Episode",
+  "show": "Crank Yankers",
+  "season": 1,
+  "episode": 1,
+  "title": "Tenacious D & Wanda Sykes",
+  "year": 2002
+ },
+ "line": null,
+ "padding": null,
+ "trim": null
+}

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Jellyfin.Plugin.Quipclipper/Jellyfin.Plugin.Quipclipper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Jellyfin.Plugin.Quipclipper.Tests/Jellyfin.Plugin.Quipclipper.Tests.csproj" />
+  </Folder>
+</Solution>

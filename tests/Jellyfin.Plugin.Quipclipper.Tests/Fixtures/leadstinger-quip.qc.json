@@ -1,0 +1,48 @@
+{
+ "schema": "quipclipper.clip-meta",
+ "version": 1,
+ "file": "Nobody.Wants.This.S03E08.One.in.a.Million.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-FLUX_00-07-38_All_women_are_detectives_Send_me_a_picture_of_the_license_plate.flac",
+ "kind": "audio",
+ "origin": "leadstinger.quip",
+ "source": {
+  "path": "/media/Nobody.Wants.This.S03E08.One.in.a.Million.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-FLUX.mkv",
+  "name": "Nobody Wants This",
+  "url": null
+ },
+ "line": {
+  "start": 458.04,
+  "end": 461.46
+ },
+ "clip": {
+  "start": 458.04,
+  "end": 461.46
+ },
+ "padding": {
+  "before": 0.0,
+  "after": 0.0
+ },
+ "trim": {
+  "start": 0.0,
+  "end": 3.42
+ },
+ "cue": "All women are detectives. Send me a picture of the license plate.",
+ "lossless": false,
+ "audio_format": "flac",
+ "jellyfin": {
+  "id": "c17e907104b233f303245cbedfb29ff2",
+  "type": "Episode",
+  "show": "Nobody Wants This",
+  "season": 3,
+  "episode": 8,
+  "title": "Watch What Happens",
+  "year": 2026
+ },
+ "set": null,
+ "codec": "flac",
+ "channels": 6,
+ "sample_rate": 48000,
+ "video_codec": null,
+ "duration": 3.42,
+ "size": 1299362,
+ "created": "2026-10-24T20:16:14Z"
+}

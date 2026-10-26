@@ -1,0 +1,36 @@
+name: CI
+
+# Build and test on every push to dev and main. The plugin builds against the 12.0.0
+# packages (the floor it loads on); the tests also run against the newest 12.x packages,
+# so a break between 12.x minors shows up here before a server pulls it.
+on:
+  push:
+    branches: [dev, main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        jellyfin: ["12.0.0", "12.*"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: dotnet build --configuration Release -p:JellyfinVersion="${{ matrix.jellyfin }}"
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --logger "console;verbosity=normal" -p:JellyfinVersion="${{ matrix.jellyfin }}"
+
+      - name: Package scripts
+        run: python3 -m py_compile scripts/package.py scripts/manifest.py

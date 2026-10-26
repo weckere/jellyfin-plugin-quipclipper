@@ -1,0 +1,19 @@
+{
+ "schema": "quipclipper.clip-meta",
+ "version": 1,
+ "file": "101 Dalmatians (1961).lsset",
+ "kind": "set",
+ "origin": "backfill",
+ "backfilled": true,
+ "created": "2026-10-20T00:46:42Z",
+ "size": 1359538,
+ "name": "101 Dalmatians (1961)",
+ "items": [
+  {
+   "title": "My story begins in London.",
+   "trim_start": 1.0,
+   "trim_end": 3.668,
+   "notes": "101.Dalmatians.1961.720p.BluRay.DTS.x264-CtrlHD · 00:03:03.058 · quipclipper"
+  }
+ ]
+}

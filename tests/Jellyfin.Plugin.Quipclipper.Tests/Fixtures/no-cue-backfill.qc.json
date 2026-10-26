@@ -1,0 +1,29 @@
+{
+ "schema": "quipclipper.clip-meta",
+ "version": 1,
+ "file": "S03E26_The_Best_of_Both_Worlds_1_Captain's_log_stardate_439891.mp4",
+ "kind": "video",
+ "origin": "backfill",
+ "backfilled": true,
+ "created": "2026-10-21T02:14:04Z",
+ "size": 361752,
+ "source": {
+  "path": null,
+  "name": "Star Trek The Next Generation",
+  "stem": "Star_Trek_The_Next_Generation"
+ },
+ "cue": null,
+ "parsed": {
+  "season": 3,
+  "episode": 26,
+  "year": null
+ },
+ "codec": "aac",
+ "channels": 6,
+ "sample_rate": 48000,
+ "video_codec": "h264",
+ "duration": 3.545,
+ "line": null,
+ "padding": null,
+ "trim": null
+}

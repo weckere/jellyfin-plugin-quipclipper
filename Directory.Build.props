@@ -1,0 +1,9 @@
+<Project>
+  <!-- The plugin's version: only scripts/release.sh changes it (tests/VersionTests checks it
+       matches CHANGELOG.md's latest release). Jellyfin versions are four-part. -->
+  <PropertyGroup>
+    <Version>0.0.0.0</Version>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
+  </PropertyGroup>
+</Project>

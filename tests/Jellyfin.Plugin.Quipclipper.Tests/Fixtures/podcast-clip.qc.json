@@ -1,0 +1,39 @@
+{
+ "schema": "quipclipper.clip-meta",
+ "version": 1,
+ "file": "00-10-00_Self-Hosted_SRE.flac",
+ "kind": "audio",
+ "origin": "clip",
+ "source": {
+  "path": "/media/Episode 102 - NixOS is a bit Flakey.mp3",
+  "name": "Self-Hosted SRE",
+  "url": null
+ },
+ "line": {
+  "start": 600.0,
+  "end": 603.0
+ },
+ "clip": {
+  "start": 599.93,
+  "end": 603.0
+ },
+ "padding": {
+  "before": 0.07,
+  "after": 0.0
+ },
+ "trim": {
+  "start": 0.07,
+  "end": 3.07
+ },
+ "cue": null,
+ "lossless": false,
+ "audio_format": "flac",
+ "jellyfin": null,
+ "codec": "flac",
+ "channels": 2,
+ "sample_rate": 44100,
+ "video_codec": null,
+ "duration": 3.07,
+ "size": 293342,
+ "created": "2026-10-21T22:47:41Z"
+}
