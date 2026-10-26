@@ -21,6 +21,13 @@ It reads the sidecars off disk: no network, no account, nothing to configure. A 
 no sidecar, or one it can't read, keeps Jellyfin's defaults; nothing the plugin does can
 fail a library scan.
 
+**Subtitles Jellyfin brings in become searchable in quipclipper within a minute.** quipclipper
+searches only indexed files, and a file whose subtitles change drops out of search until it is
+re-indexed. Once the plugin is connected to quipclipper, a subtitle Jellyfin downloads (its
+*Download missing subtitles* task, a search in an item's subtitle dialog) or notices dropped
+into a library makes the plugin queue that file for re-indexing in quipclipper, with no button
+pressed.
+
 ## Install
 
 1. In Jellyfin: **Dashboard › Plugins › Repositories › +**, name it `quipclipper`, URL
@@ -33,6 +40,21 @@ fail a library scan.
    scan of the Clips library after each cut).
 
 Later versions arrive through Jellyfin's **Update Plugins** task.
+
+### Connect to quipclipper (subtitle re-index)
+
+1. **Dashboard › Plugins › quipclipper**: enter quipclipper's URL as *this server* reaches it
+   (from a container, its address on Jellyfin's network), and press **Connect**.
+2. quipclipper's pages show a banner, *Jellyfin on (server) wants to queue subtitle
+   re-indexes and read transcripts, code 7F3K*. Press **Allow** if the code matches the one
+   on the plugin page.
+3. Optionally tick the libraries to watch (none ticked: all) and **Save**.
+
+The plugin pairs with quipclipper's scoped client tokens (quipclipper with scopes; see its
+docs/API.md, Pairing): its key can queue re-indexes and read transcripts and nothing else, and
+it is kept in the plugin's configuration (readable by Jellyfin and its admins). **Disconnect**
+revokes it, as does Revoke under quipclipper's Settings › Connected apps. quipclipper maps
+Jellyfin's paths with its Jellyfin path map, which it derives itself when none is set.
 
 If you change the library's settings, keep **quipclipper** ticked under *Image fetchers*
 for Video and Folder (and above *Screen Grabber*).
@@ -50,6 +72,23 @@ for Video and Folder (and above *Screen Grabber*).
   deletes that file.
 - The sidecar schema is quipclipper's `quipclipper.clip-meta` v1 (quipclipper's
   docs/API.md, "The metadata sidecar"). Every field but a few is optional and may be `null`.
+
+### How the subtitle watcher works
+
+- `SubtitleWatcher` (a hosted service) notes every video and audio file Jellyfin adds or
+  updates; every way a subtitle arrives ends in an item update. It does nothing else on
+  Jellyfin's thread.
+- `SubtitleWatch`, on a loop of its own, waits until a burst of updates is over (10 s after
+  the last, at most 30 s after the first), lists each noted file's folder, and compares its
+  subtitle files (the ones named like it, as quipclipper finds them, with their write times)
+  with what it saw before. Only a change is sent: `POST /api/index/file` with
+  `{"paths": [...], "source": "jellyfin"}`, at most 1,000 paths a request.
+- The first time it watches a library folder it walks it once to note what is there, and
+  sends nothing for it. Its state (that baseline, and what waits) is
+  `plugins/configurations/quipclipper-subtitles.json` in Jellyfin's data folder.
+- quipclipper down or failing: what waits is kept (up to 10,000 files) and retried after 30 s,
+  doubling up to 10 minutes. A 401 or 403 (revoked key) stops it until the server connects
+  again; the plugin page says so.
 
 ## Build and test
 

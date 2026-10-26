@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>quipclipper</title>
+</head>
+<body>
+    <div id="QuipclipperConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <h2 class="sectionTitle">quipclipper</h2>
+                <p>Clip metadata needs nothing set here: a Home Videos library on quipclipper's clips folder shows each clip by its line.</p>
+
+                <h3 class="sectionTitle">Re-index changed subtitles</h3>
+                <p>When Jellyfin downloads a subtitle, or notices one dropped into a library, this server tells quipclipper, which re-indexes that file so its lines are searchable within a minute. Connect pairs with quipclipper: allow the code shown here in quipclipper's banner. Its key can only queue re-indexes and read transcripts.</p>
+
+                <div id="QcDisconnected">
+                    <div class="inputContainer">
+                        <input is="emby-input" type="url" id="QcServerUrl" label="quipclipper's URL, as this server reaches it" placeholder="http://quipclipper:8080" />
+                        <div class="fieldDescription">Jellyfin calls it, not your browser: from a container, its address on Jellyfin's network.</div>
+                    </div>
+                    <button is="emby-button" type="button" id="QcConnect" class="raised button-submit block"><span>Connect</span></button>
+                    <div id="QcPairing" hidden>
+                        <p>Allow <strong>Jellyfin</strong> in quipclipper's banner if it shows the code <strong id="QcCode" style="font-size:1.4em;letter-spacing:.15em"></strong>.</p>
+                        <button is="emby-button" type="button" id="QcCancel" class="raised block"><span>Cancel</span></button>
+                    </div>
+                </div>
+
+                <div id="QcConnected" hidden>
+                    <p>Connected to <strong id="QcServerShown"></strong> (<span id="QcScopes"></span>).</p>
+                    <div class="checkboxContainer">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" id="QcWatch" />
+                            <span>Send changed subtitles to quipclipper</span>
+                        </label>
+                    </div>
+                    <div class="verticalSection">
+                        <h3 class="checkboxListLabel">Libraries to watch (none ticked: all)</h3>
+                        <div id="QcLibraries" class="checkboxList paperList" style="padding:.5em 1em"></div>
+                    </div>
+                    <p id="QcWatchStatus" class="fieldDescription"></p>
+                    <button is="emby-button" type="button" id="QcSave" class="raised button-submit block"><span>Save</span></button>
+                    <button is="emby-button" type="button" id="QcDisconnect" class="raised block"><span>Disconnect</span></button>
+                </div>
+
+                <p id="QcMessage" class="fieldDescription" style="color:var(--theme-text-color, inherit)"></p>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '6b6ea665-479b-4209-9ab3-a5e2a42275df';
+                var page = document.querySelector('#QuipclipperConfigPage');
+                var pollTimer = null;
+                function $(id) { return page.querySelector('#' + id); }
+                function api(type, path, body) {
+                    var opts = { type: type, url: ApiClient.getUrl('Quipclipper/' + path), dataType: 'json' };
+                    if (body !== undefined) { opts.data = JSON.stringify(body); opts.contentType = 'application/json'; }
+                    return ApiClient.ajax(opts);
+                }
+                function say(text) { $('QcMessage').textContent = text || ''; }
+                function failed(err) {
+                    var p = err && err.json ? err.json() : Promise.resolve(null);
+                    return p.catch(function () { return null; }).then(function (body) {
+                        say((body && body.detail) || ('Failed' + (err && err.status ? ' (' + err.status + ')' : '')));
+                    });
+                }
+                function stopPolling() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+                function poll() {
+                    api('GET', 'Pair').then(function (s) {
+                        if (s.Status === 'pending' || s.status === 'pending') { pollTimer = setTimeout(poll, 2000); return; }
+                        stopPolling();
+                        $('QcPairing').hidden = true;
+                        var status = s.Status || s.status;
+                        say(status === 'connected' ? 'Connected.' : status === 'denied' ? 'quipclipper turned it down.' : 'The request expired; connect again.');
+                        load();
+                    }, function (err) { stopPolling(); $('QcPairing').hidden = true; failed(err); });
+                }
+                function showStatus(st) {
+                    var parts = [];
+                    if (st.seeding) parts.push('Looking through the libraries for their subtitles (nothing is sent for what is already there)…');
+                    parts.push(st.known + ' files with subtitles known; ' + st.pending + ' waiting to be sent' + (st.dropped ? ' (' + st.dropped + ' dropped)' : '') + '.');
+                    if (st.lastSend) parts.push('Last sent ' + new Date(st.lastSend.at).toLocaleString() + ': ' + st.lastSend.sent + ' files' + (st.lastSend.problem ? ' (' + st.lastSend.problem + ')' : '') + '.');
+                    if (st.lastError) parts.push('Stopped: ' + st.lastError);
+                    $('QcWatchStatus').textContent = parts.join(' ');
+                }
+                function load() {
+                    Dashboard.showLoadingMsg();
+                    Promise.all([ApiClient.getPluginConfiguration(pluginId), api('GET', 'Status'), api('GET', 'Libraries')]).then(function (r) {
+                        var config = r[0], st = r[1], libs = r[2];
+                        $('QcDisconnected').hidden = st.connected;
+                        $('QcConnected').hidden = !st.connected;
+                        $('QcServerUrl').value = config.ServerUrl || '';
+                        $('QcServerShown').textContent = config.ServerUrl || '';
+                        $('QcScopes').textContent = (config.Scopes && config.Scopes.length) ? 'may ' + config.Scopes.join(', ') : 'full access';
+                        $('QcWatch').checked = config.WatchSubtitles;
+                        var picked = config.LibraryIds || [];
+                        var box = $('QcLibraries');
+                        box.innerHTML = '';
+                        libs.forEach(function (lib) {
+                            var label = document.createElement('label');
+                            var input = document.createElement('input');
+                            input.type = 'checkbox';
+                            input.setAttribute('is', 'emby-checkbox');
+                            input.dataset.id = lib.id;
+                            input.checked = picked.indexOf(lib.id) >= 0;
+                            var span = document.createElement('span');
+                            span.textContent = lib.name + ' (' + (lib.locations || []).join(', ') + ')';
+                            label.appendChild(input);
+                            label.appendChild(span);
+                            box.appendChild(label);
+                        });
+                        showStatus(st);
+                    }).catch(failed).then(function () { Dashboard.hideLoadingMsg(); });
+                }
+                page.addEventListener('pageshow', function () { say(''); load(); });
+                page.addEventListener('pagehide', stopPolling);
+                $('QcConnect').addEventListener('click', function () {
+                    say('');
+                    api('POST', 'Pair', { ServerUrl: $('QcServerUrl').value }).then(function (s) {
+                        $('QcCode').textContent = s.Code || s.code;
+                        $('QcPairing').hidden = false;
+                        stopPolling();
+                        pollTimer = setTimeout(poll, 2000);
+                    }, failed);
+                });
+                $('QcCancel').addEventListener('click', function () {
+                    stopPolling();
+                    $('QcPairing').hidden = true;
+                    api('DELETE', 'Pair').catch(function () {});
+                });
+                $('QcSave').addEventListener('click', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.WatchSubtitles = $('QcWatch').checked;
+                        config.LibraryIds = Array.prototype.map.call(
+                            $('QcLibraries').querySelectorAll('input:checked'), function (i) { return i.dataset.id; });
+                        return ApiClient.updatePluginConfiguration(pluginId, config);
+                    }).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                        load();
+                    }).catch(failed).then(function () { Dashboard.hideLoadingMsg(); });
+                });
+                $('QcDisconnect').addEventListener('click', function () {
+                    api('POST', 'Disconnect').then(function (r) {
+                        say(r.problem ? 'Disconnected here. ' + r.problem : 'Disconnected.');
+                        load();
+                    }, failed);
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

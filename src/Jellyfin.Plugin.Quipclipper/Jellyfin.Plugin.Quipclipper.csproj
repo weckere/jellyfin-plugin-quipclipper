@@ -23,6 +23,15 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- The settings page's API controller. Jellyfin runs on ASP.NET Core: referenced, not shipped. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration\configPage.html" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Jellyfin.Plugin.Quipclipper.Tests" />
   </ItemGroup>

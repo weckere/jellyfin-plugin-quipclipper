@@ -9,6 +9,24 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+### Re-index changed subtitles (quipclipper M22, Phase 2)
+
+- **Subtitles Jellyfin brings in become searchable in quipclipper within a minute.** A
+  subtitle Jellyfin downloads (its "Download missing subtitles" task, a search in an item's
+  subtitle dialog) or notices dropped into a library makes the plugin send that file to
+  quipclipper's re-index queue, with no button pressed. Only real changes are sent (a
+  subtitle file added, removed or rewritten): the first run notes what every library holds
+  and sends nothing; a burst of item updates (a library scan) is sent ~10 s after it ends, at
+  most 30 s after it starts, 1,000 files a request. While quipclipper is down, up to 10,000
+  files wait (kept across restarts) and are retried after 30 s, doubling up to 10 minutes.
+- **Connect on the plugin's settings page.** Enter quipclipper's URL and press Connect; allow
+  the code in quipclipper's banner. The plugin pairs with scopes `index.file` and
+  `transcripts.read`, so its key can only queue re-indexes and read transcripts (needs
+  quipclipper with scoped client tokens). Disconnect revokes it. Pick the libraries to watch
+  (none ticked: all), or switch sending off.
+- Everything runs on a background loop of its own with short timeouts; nothing can fail or
+  slow a library scan. A revoked key stops sending until the server connects again.
+
 ## [0.1.0.0] - 2026-10-25
 
 ### Clip metadata (quipclipper M22, Phase 1)
