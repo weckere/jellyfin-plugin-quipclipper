@@ -9,6 +9,8 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+## [0.3.0.0] - 2026-10-25
+
 ### Machine transcripts as a subtitle source (quipclipper M22, Phase 3)
 
 - **Jellyfin's subtitle search offers quipclipper's machine transcripts.** For a movie or
