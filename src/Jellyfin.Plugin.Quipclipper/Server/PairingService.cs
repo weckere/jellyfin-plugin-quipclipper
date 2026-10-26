@@ -80,12 +80,26 @@ public sealed class PairingService
         {
             case "pending":
                 return PairingState.Waiting(pending.Code, pending.ExpiresAt);
+            case "approved" when !string.IsNullOrEmpty(poll.Token) && poll.Scopes is null:
+                // A quipclipper from before scoped tokens handed out a full one: too much to keep
+                // in Jellyfin's configuration. Give it back.
+                Clear(pending);
+                try
+                {
+                    await _client().DisconnectAsync(pending.Server, poll.Token!, cancellationToken).ConfigureAwait(false);
+                }
+                catch (QuipclipperException)
+                {
+                    return PairingState.Of("too_old", "This quipclipper has no scoped tokens (update it). It still lists \"Jellyfin\" under Settings, Connected apps: revoke it there.");
+                }
+
+                return PairingState.Of("too_old", "This quipclipper has no scoped tokens, so it gave full access; the plugin handed it back. Update quipclipper and connect again.");
             case "approved" when !string.IsNullOrEmpty(poll.Token):
                 var config = _config.Current;
                 config.ServerUrl = pending.Server.AbsoluteUri.TrimEnd('/');
                 config.Token = poll.Token!;
                 config.ClientId = poll.ClientId ?? string.Empty;
-                config.Scopes = poll.Scopes?.ToArray() ?? []; // none: an older quipclipper's full token
+                config.Scopes = poll.Scopes!.ToArray();
                 config.LastError = string.Empty;
                 Clear(pending);
                 _config.Save(config);
@@ -147,10 +161,11 @@ public sealed class PairingService
 }
 
 /// <summary>How pairing stands, for the settings page.</summary>
-/// <param name="Status"><c>idle</c>, <c>pending</c>, <c>connected</c>, <c>denied</c> or <c>expired</c>.</param>
+/// <param name="Status"><c>idle</c>, <c>pending</c>, <c>connected</c>, <c>denied</c>, <c>expired</c> or <c>too_old</c> (a quipclipper without scoped tokens).</param>
 /// <param name="Code">The code to compare with quipclipper's banner, while pending.</param>
 /// <param name="ExpiresAt">When a pending request expires.</param>
-public sealed record PairingState(string Status, string? Code, DateTimeOffset? ExpiresAt)
+/// <param name="Detail">What to tell the person, when there is more to say.</param>
+public sealed record PairingState(string Status, string? Code, DateTimeOffset? ExpiresAt, string? Detail = null)
 {
     /// <summary>A request waiting for a person.</summary>
     /// <param name="code">Its code.</param>
@@ -162,4 +177,10 @@ public sealed record PairingState(string Status, string? Code, DateTimeOffset? E
     /// <param name="status">The status.</param>
     /// <returns>The state.</returns>
     public static PairingState Of(string status) => new(status, null, null);
+
+    /// <summary>A state with no code and something to say.</summary>
+    /// <param name="status">The status.</param>
+    /// <param name="detail">What to say.</param>
+    /// <returns>The state.</returns>
+    public static PairingState Of(string status, string detail) => new(status, null, null, detail);
 }

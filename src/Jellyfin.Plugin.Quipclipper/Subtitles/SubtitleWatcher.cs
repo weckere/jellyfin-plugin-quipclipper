@@ -122,9 +122,11 @@ public sealed class SubtitleWatcher : IHostedService, IDisposable
                 _watch.Notify(path);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning disable CA1031 // nothing at all may reach Jellyfin's scan from here
+        catch (Exception ex)
+#pragma warning restore CA1031
         {
-            Log.NotifyFailed(_logger, ex); // never into Jellyfin's scan
+            Log.NotifyFailed(_logger, ex);
         }
     }
 

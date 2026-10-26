@@ -71,7 +71,7 @@
                         stopPolling();
                         $('QcPairing').hidden = true;
                         var status = s.Status || s.status;
-                        say(status === 'connected' ? 'Connected.' : status === 'denied' ? 'quipclipper turned it down.' : 'The request expired; connect again.');
+                        say(s.Detail || s.detail || (status === 'connected' ? 'Connected.' : status === 'denied' ? 'quipclipper turned it down.' : 'The request expired; connect again.'));
                         load();
                     }, function (err) { stopPolling(); $('QcPairing').hidden = true; failed(err); });
                 }

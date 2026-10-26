@@ -228,4 +228,40 @@ public sealed class SubtitleWatchTests : IDisposable
         Assert.Null(SubtitleWatcher.MediaPath(new Folder { Path = "/m" }));
         Assert.Null(SubtitleWatcher.MediaPath(null));
     }
+
+    [Fact]
+    public async Task A_burst_wakes_the_watcher_once()
+    {
+        var w = Watch();
+        await w.RunAsync(default);
+        var woken = 0;
+        w.Woken += (_, _) => woken++;
+        for (var i = 0; i < 500; i++)
+        {
+            w.Notify(_ep);  // a library scan updating the same items over and over
+        }
+
+        Assert.Equal(1, woken);
+        await Settle(w);
+        w.Notify(_ep);  // after the burst was handled, a new one wakes it again
+        Assert.Equal(2, woken);
+    }
+
+    [Fact]
+    public async Task A_url_that_isnt_one_stops_sending_and_says_so()
+    {
+        var w = Watch();
+        await w.RunAsync(default);
+        _dir.File("shows/TNG/Season 3/TNG.S03E26.de.srt", "neu");
+        w.Notify(_ep);
+        _config.Current.ServerUrl = "nonsense";
+        _config.Current.Token = FakeQuipclipper.Token;
+        Assert.False(_config.Current.Connected);  // not even connected: nothing is noted
+        _config.Current.ServerUrl = "ftp://quipclipper.test";
+        w.Notify(_ep);
+        await Settle(w);
+        Assert.Contains("isn't an http(s) URL", _config.Current.LastError, StringComparison.Ordinal);
+        Assert.Null(w.NextRunAt);   // no spinning: stopped until it connects again
+        Assert.Empty(_qc.Requests);
+    }
 }

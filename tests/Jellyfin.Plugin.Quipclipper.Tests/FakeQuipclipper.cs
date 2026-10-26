@@ -26,6 +26,9 @@ internal sealed class FakeQuipclipper : HttpMessageHandler
 
     public bool Revoked { get; set; }
 
+    /// <summary>When set, answers as a quipclipper from before scoped tokens: a full token, no scopes.</summary>
+    public bool NoScopes { get; set; }
+
     public List<string[]> Queued { get; } = [];
 
     public QuipclipperClient Client() => new(new HttpClient(this, disposeHandler: false), TimeSpan.FromSeconds(5));
@@ -67,7 +70,9 @@ internal sealed class FakeQuipclipper : HttpMessageHandler
                 if (pair.Status == "approved")
                 {
                     Pairs.Remove(rid);
-                    return Json(HttpStatusCode.OK, new { status = "approved", token = Token, client_id = "cl1", scopes = new[] { "index.file", "transcripts.read" } });
+                    return NoScopes
+                        ? Json(HttpStatusCode.OK, new { status = "approved", token = Token, client_id = "cl1" })
+                        : Json(HttpStatusCode.OK, new { status = "approved", token = Token, client_id = "cl1", scopes = new[] { "index.file", "transcripts.read" } });
                 }
 
                 return Json(HttpStatusCode.OK, new { status = pair.Status });

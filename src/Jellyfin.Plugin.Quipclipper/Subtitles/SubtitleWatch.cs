@@ -104,12 +104,18 @@ public sealed class SubtitleWatch
         }
 
         _changed[mediaPath] = 0;
+        bool started;
         lock (_lock)
         {
-            _debounce.Touch(_time.GetUtcNow());
+            started = _debounce.Touch(_time.GetUtcNow());
         }
 
-        Woken?.Invoke(this, EventArgs.Empty);
+        // Only a new burst moves the watcher's next run earlier; during a library scan the
+        // thousands of events after the first just wait for it.
+        if (started)
+        {
+            Woken?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>Does what is due: builds missing baselines, checks the files of a finished burst, sends what changed.</summary>
@@ -165,7 +171,8 @@ public sealed class SubtitleWatch
 
         if (due)
         {
-            foreach (var path in _changed.Keys.ToList())
+            var folders = new Dictionary<string, Dictionary<string, IReadOnlyDictionary<string, long>>>(StringComparer.Ordinal);
+            foreach (var path in _changed.Keys.Order(StringComparer.Ordinal).ToList())
             {
                 _changed.TryRemove(path, out _);
                 var location = locations.FirstOrDefault(l => Under(path, l));
@@ -174,7 +181,14 @@ public sealed class SubtitleWatch
                     continue; // a library that isn't watched
                 }
 
-                var subtitles = SubtitleFiles.For(path);
+                // One listing per folder: a scan updates every episode of a season at once.
+                var dir = Path.GetDirectoryName(path) ?? string.Empty;
+                if (!folders.TryGetValue(dir, out var inFolder))
+                {
+                    folders[dir] = inFolder = SubtitleFiles.InFolder(dir);
+                }
+
+                var subtitles = inFolder.TryGetValue(path, out var found) ? found : new Dictionary<string, long>();
                 if (_state.IsSeeded(location))
                 {
                     _state.Observe(path, subtitles);
@@ -188,9 +202,14 @@ public sealed class SubtitleWatch
             Save();
         }
 
-        if (_stopped || _state.PendingCount == 0 || (_retryAt is { } at && now < at)
-            || QuipclipperClient.ParseServer(config.ServerUrl) is not { } server)
+        if (_stopped || _state.PendingCount == 0 || (_retryAt is { } at && now < at))
         {
+            return;
+        }
+
+        if (QuipclipperClient.ParseServer(config.ServerUrl) is not { } server)
+        {
+            Stop(config, $"quipclipper's URL \"{config.ServerUrl}\" isn't an http(s) URL: connect again.");
             return;
         }
 
@@ -215,16 +234,20 @@ public sealed class SubtitleWatch
                 Log.SendFailed(_logger, outcome.Detail, _state.PendingCount, pause);
                 break;
             case SendKind.Stopped:
-                _stopped = true;
-                Log.TokenRefused(_logger, outcome.Detail);
-                var latest = _config.Current;
-                if (latest.Token == config.Token)
-                {
-                    latest.LastError = outcome.Detail ?? "quipclipper refused the token: pair again.";
-                    _config.Save(latest);
-                }
-
+                Stop(config, outcome.Detail ?? "quipclipper refused the token: pair again.");
                 break;
+        }
+    }
+
+    private void Stop(Configuration.PluginConfiguration config, string why)
+    {
+        _stopped = true;
+        Log.TokenRefused(_logger, why);
+        var latest = _config.Current;
+        if (latest.Token == config.Token && latest.LastError != why)
+        {
+            latest.LastError = why;
+            _config.Save(latest);
         }
     }
 

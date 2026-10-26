@@ -70,4 +70,14 @@ public class SubtitleFilesTests
         Assert.True(SubtitleFiles.Differ(a, null));
         Assert.False(SubtitleFiles.Differ(null, new Dictionary<string, long>()));
     }
+
+    [Fact]
+    public void Folders_doesnt_follow_links_to_folders()
+    {
+        using var dir = new TempDir();
+        dir.File("a/x.mkv", string.Empty);
+        Directory.CreateSymbolicLink(Path.Combine(dir.Path, "a", "loop"), dir.Path);  // a cycle
+        var names = SubtitleFiles.Folders(dir.Path).Select(p => Path.GetRelativePath(dir.Path, p)).ToList();
+        Assert.Equal([".", "a"], names);
+    }
 }

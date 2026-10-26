@@ -36,10 +36,13 @@ public sealed class Debounce
 
     /// <summary>An event came.</summary>
     /// <param name="now">When.</param>
-    public void Touch(DateTimeOffset now)
+    /// <returns>True when it starts a burst (nothing was waiting): only then does the watcher need waking.</returns>
+    public bool Touch(DateTimeOffset now)
     {
+        var started = _first is null;
         _first ??= now;
         _last = now;
+        return started;
     }
 
     /// <summary>Whether the burst is over.</summary>

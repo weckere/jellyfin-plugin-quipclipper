@@ -22,7 +22,8 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 - **Connect on the plugin's settings page.** Enter quipclipper's URL and press Connect; allow
   the code in quipclipper's banner. The plugin pairs with scopes `index.file` and
   `transcripts.read`, so its key can only queue re-indexes and read transcripts (needs
-  quipclipper with scoped client tokens). Disconnect revokes it. Pick the libraries to watch
+  quipclipper with scoped client tokens; an older quipclipper's full-access token is handed
+  back, not kept). Disconnect revokes it. Pick the libraries to watch
   (none ticked: all), or switch sending off.
 - Everything runs on a background loop of its own with short timeouts; nothing can fail or
   slow a library scan. A revoked key stops sending until the server connects again.

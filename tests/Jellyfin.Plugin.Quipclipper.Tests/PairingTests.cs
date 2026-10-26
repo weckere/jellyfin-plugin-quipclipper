@@ -116,6 +116,20 @@ public class PairingTests
         Assert.False(_config.Current.Connected);
     }
 
+    [Fact]
+    public async Task A_full_token_from_a_quipclipper_without_scopes_is_handed_back()
+    {
+        _qc.NoScopes = true;
+        await _pairing.StartAsync("http://quipclipper.test:8090", default);
+        _qc.Approve("req0");
+        var state = await _pairing.PollAsync(default);
+        Assert.Equal("too_old", state.Status);
+        Assert.Contains("Update quipclipper", state.Detail, StringComparison.Ordinal);
+        Assert.True(_qc.Revoked);                         // DELETE /api/clients/self with it
+        Assert.False(_config.Current.Connected);          // and never kept
+        Assert.Equal(0, _config.Saves);
+    }
+
     private async Task Connect()
     {
         await _pairing.StartAsync("http://quipclipper.test:8090", default);

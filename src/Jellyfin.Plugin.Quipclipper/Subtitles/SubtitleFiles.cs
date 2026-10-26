@@ -122,11 +122,24 @@ public static class SubtitleFiles
 
             foreach (var sub in subdirs.OrderByDescending(s => s, StringComparer.Ordinal))
             {
-                if (!Path.GetFileName(sub).StartsWith('.'))
+                // Hidden folders, and links to folders (a link cycle would walk forever).
+                if (!Path.GetFileName(sub).StartsWith('.') && !IsLink(sub))
                 {
                     stack.Push(sub);
                 }
             }
+        }
+    }
+
+    private static bool IsLink(string dir)
+    {
+        try
+        {
+            return new DirectoryInfo(dir).LinkTarget is not null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return true;
         }
     }
 
