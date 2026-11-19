@@ -38,7 +38,7 @@ public class ClipMetadataProvider : ILocalMetadataProvider<Video>, IHasItemChang
     internal Feature Feature => _feature;
 
     /// <inheritdoc />
-    public string Name => "quipclipper";
+    public string Name => Plugin.ProviderKey;
 
     /// <inheritdoc />
     public Task<MetadataResult<Video>> GetMetadata(ItemInfo info, IDirectoryService directoryService, CancellationToken cancellationToken)

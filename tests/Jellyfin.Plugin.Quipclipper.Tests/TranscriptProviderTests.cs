@@ -43,6 +43,18 @@ public sealed class TranscriptProviderTests : IDisposable
     }
 
     [Fact]
+    public void Its_results_show_QuipClipper_yet_lead_Jellyfin_back_to_this_provider()
+    {
+        // Jellyfin's SubtitleManager ids a result by the MD5 of its ProviderName lowercased and
+        // finds the provider for a download the same way from its Name: the two must agree
+        // lowercased. The Name itself stays as it was, since libraries store their order by it.
+        Assert.Equal("QuipClipper (machine transcript)", TranscriptSubtitleProvider.DisplayName);
+        Assert.Equal(
+            TranscriptSubtitleProvider.ProviderName.ToLowerInvariant(),
+            TranscriptSubtitleProvider.DisplayName.ToLowerInvariant());
+    }
+
+    [Fact]
     public async Task A_manual_search_offers_the_machine_lines_and_the_full_transcript()
     {
         var found = (await _provider.Search(Manual(), default)).ToList();
@@ -51,7 +63,7 @@ public sealed class TranscriptProviderTests : IDisposable
             found.Select(r => r.Name));
         Assert.All(found, r =>
         {
-            Assert.Equal("quipclipper (machine transcript)", r.ProviderName);
+            Assert.Equal("QuipClipper (machine transcript)", r.ProviderName);
             Assert.Equal("eng", r.ThreeLetterISOLanguageName);
             Assert.Equal("srt", r.Format);
             Assert.Equal("Machine transcript (small.en), not subtitles: saved as Darkplace - S01E06.en.whisper.srt.", r.Comment);

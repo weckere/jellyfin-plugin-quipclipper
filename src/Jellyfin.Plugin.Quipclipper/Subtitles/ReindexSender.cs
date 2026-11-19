@@ -45,10 +45,10 @@ public static class ReindexSender
                     // Revoked, or a token that may not queue re-indexes: only pairing again helps.
                     // What waits is kept for then.
                     return new SendOutcome(SendKind.Stopped, sent, refused,
-                        $"quipclipper refused the token ({result.Status}): {result.Detail ?? "pair again"}");
+                        $"QuipClipper refused the token ({result.Status}): {result.Detail ?? "pair again"}");
                 default:
                     return new SendOutcome(SendKind.Retry, sent, refused,
-                        result.Status is { } code ? $"quipclipper answered {code}: {result.Detail}" : result.Detail);
+                        result.Status is { } code ? $"QuipClipper answered {code}: {result.Detail}" : result.Detail);
             }
         }
     }

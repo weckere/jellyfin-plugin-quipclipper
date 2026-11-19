@@ -209,7 +209,7 @@ public sealed class SubtitleWatch
 
         if (QuipclipperClient.ParseServer(config.ServerUrl) is not { } server)
         {
-            Stop(config, $"quipclipper's URL \"{config.ServerUrl}\" isn't an http(s) URL: connect again.");
+            Stop(config, $"QuipClipper's URL \"{config.ServerUrl}\" isn't an http(s) URL: connect again.");
             return;
         }
 
@@ -234,7 +234,7 @@ public sealed class SubtitleWatch
                 Log.SendFailed(_logger, outcome.Detail, _state.PendingCount, pause);
                 break;
             case SendKind.Stopped:
-                Stop(config, outcome.Detail ?? "quipclipper refused the token: pair again.");
+                Stop(config, outcome.Detail ?? "QuipClipper refused the token: pair again.");
                 break;
         }
     }

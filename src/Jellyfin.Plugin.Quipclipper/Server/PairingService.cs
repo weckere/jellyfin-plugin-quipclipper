@@ -52,7 +52,7 @@ public sealed class PairingService : IDisposable
     public async Task<PairingState> StartAsync(string serverUrl, CancellationToken cancellationToken)
     {
         var server = QuipclipperClient.ParseServer(serverUrl)
-                     ?? throw new ArgumentException("Enter quipclipper's URL, like http://quipclipper:8080.", nameof(serverUrl));
+                     ?? throw new ArgumentException("Enter QuipClipper's URL, like http://quipclipper:8080.", nameof(serverUrl));
         var host = (ServerName() ?? string.Empty).Trim();
         host = host.Length > 100 ? host[..100] : host;
         var started = await _client().StartPairAsync(server, "Jellyfin", host, cancellationToken).ConfigureAwait(false);
@@ -124,10 +124,10 @@ public sealed class PairingService : IDisposable
                 }
                 catch (QuipclipperException)
                 {
-                    return PairingState.Of("too_old", "This quipclipper has no scoped tokens (update it). It still lists \"Jellyfin\" under Settings, Connected apps: revoke it there.");
+                    return PairingState.Of("too_old", "This QuipClipper has no scoped tokens (update it). It still lists \"Jellyfin\" under Settings, Connected apps: revoke it there.");
                 }
 
-                return PairingState.Of("too_old", "This quipclipper has no scoped tokens, so it gave full access; the plugin handed it back. Update quipclipper and connect again.");
+                return PairingState.Of("too_old", "This QuipClipper has no scoped tokens, so it gave full access; the plugin handed it back. Update QuipClipper and connect again.");
             case "approved" when !string.IsNullOrEmpty(poll.Token):
                 var config = _config.Current;
                 config.ServerUrl = pending.Server.AbsoluteUri.TrimEnd('/');
@@ -168,7 +168,7 @@ public sealed class PairingService : IDisposable
             }
             catch (QuipclipperException ex)
             {
-                problem = ex.Message + ". Revoke \"Jellyfin\" under quipclipper's Settings, Connected apps.";
+                problem = ex.Message + ". Revoke \"Jellyfin\" under QuipClipper's Settings, Connected apps.";
             }
         }
 

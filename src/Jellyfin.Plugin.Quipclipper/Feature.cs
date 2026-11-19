@@ -208,9 +208,9 @@ internal sealed class Feature
 /// <summary>The guard's log messages.</summary>
 internal static partial class Log
 {
-    [LoggerMessage(Level = LogLevel.Error, Message = "quipclipper: {Feature} is off until Jellyfin restarts: this Jellyfin doesn't match what the plugin was built against. Update the plugin")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "QuipClipper: {Feature} is off until Jellyfin restarts: this Jellyfin doesn't match what the plugin was built against. Update the plugin")]
     public static partial void FeatureOff(ILogger logger, Exception exception, string feature);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "quipclipper: {Feature} is off until Jellyfin restarts ({Reason}): this Jellyfin doesn't match what the plugin was built against. Update the plugin")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "QuipClipper: {Feature} is off until Jellyfin restarts ({Reason}): this Jellyfin doesn't match what the plugin was built against. Update the plugin")]
     public static partial void FeatureOffEarly(ILogger logger, string feature, string? reason);
 }

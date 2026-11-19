@@ -36,7 +36,7 @@ public class ClipFolderMetadataProvider : ILocalMetadataProvider<Folder>, IHasIt
     internal Feature Feature => _feature;
 
     /// <inheritdoc />
-    public string Name => "quipclipper";
+    public string Name => Plugin.ProviderKey;
 
     /// <inheritdoc />
     public Task<MetadataResult<Folder>> GetMetadata(ItemInfo info, IDirectoryService directoryService, CancellationToken cancellationToken)

@@ -29,8 +29,18 @@ namespace Jellyfin.Plugin.Quipclipper.Transcripts;
 /// </summary>
 public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
 {
-    /// <summary>The provider's name in Jellyfin (its subtitle dialog and the libraries' "Subtitle downloaders").</summary>
+    /// <summary>
+    /// The provider's name, which Jellyfin keys on: the libraries' "Subtitle downloaders" list
+    /// it and store their order by it (see <see cref="Plugin.ProviderKey"/>), so it stays lowercase.
+    /// </summary>
     public const string ProviderName = "quipclipper (machine transcript)";
+
+    /// <summary>
+    /// What the subtitle search dialog shows beside each result. Jellyfin turns a result's
+    /// provider name into its id case-blind (the MD5 of its lowercase form), so it still finds
+    /// this provider when someone downloads one.
+    /// </summary>
+    public const string DisplayName = "QuipClipper (machine transcript)";
 
     /// <summary>The token quipclipper's machine sidecars carry: <c>&lt;stem&gt;.&lt;lang&gt;.whisper.srt</c>.</summary>
     public const string SidecarToken = "whisper";
@@ -123,7 +133,7 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
     {
         var response = await _feature.RunAsync(_logger, () => Fetch(id, cancellationToken), null).ConfigureAwait(false);
         return response ?? throw new InvalidOperationException(
-            "The quipclipper plugin's machine transcripts are off until Jellyfin restarts (this Jellyfin doesn't match the plugin; see the log): " + _feature.Reason);
+            "The QuipClipper plugin's machine transcripts are off until Jellyfin restarts (this Jellyfin doesn't match the plugin; see the log): " + _feature.Reason);
     }
 
     /// <summary>Whether the item at a media path has a machine sidecar already, beside it or in Jellyfin's metadata folder for it.</summary>
@@ -199,12 +209,12 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
         var server = config.Connected ? QuipclipperClient.ParseServer(config.ServerUrl) : null;
         if (server is null)
         {
-            throw new InvalidOperationException("The quipclipper plugin isn't connected to quipclipper.");
+            throw new InvalidOperationException("The QuipClipper plugin isn't connected to QuipClipper.");
         }
 
         // Signed with the token: an id made up by hand can't name another file's path.
         var (lines, language, path) = ParseId(id, config.Token)
-            ?? throw new ArgumentException("Not a quipclipper machine transcript id from this server.", nameof(id));
+            ?? throw new ArgumentException("Not a QuipClipper machine transcript id from this server.", nameof(id));
         if (HasSidecar(path))
         {
             throw new InvalidOperationException("This file has a machine transcript already (beside it, or in Jellyfin's metadata folder for it).");
@@ -296,11 +306,11 @@ public sealed partial class TranscriptSubtitleProvider : ISubtitleProvider
         RemoteSubtitleInfo Result(string lines, string title, int count) => new()
         {
             Id = MakeId(lines, lang, path, key),
-            ProviderName = ProviderName,
+            ProviderName = DisplayName,
             Name = string.Create(CultureInfo.InvariantCulture, $"{title} ({models}, {heard}, {count} lines)"),
             ThreeLetterISOLanguageName = request.Language,
             Format = "srt",
-            Author = "quipclipper",
+            Author = "QuipClipper",
             Comment = comment,
             IsHashMatch = true,
             Forced = false,

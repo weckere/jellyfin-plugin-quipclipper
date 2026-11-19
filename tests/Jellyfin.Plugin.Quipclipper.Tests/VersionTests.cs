@@ -32,7 +32,7 @@ public partial class VersionTests
         using var meta = JsonDocument.Parse(RepoFile("plugin-meta.json"));
         var root = meta.RootElement;
         Assert.Equal(Plugin.PluginId, root.GetProperty("guid").GetGuid());
-        Assert.Equal("quipclipper", root.GetProperty("name").GetString());
+        Assert.Equal("QuipClipper", root.GetProperty("name").GetString());
         // The floor: a plugin loads on every server at least this version (Jellyfin has no ceiling).
         Assert.Equal("12.0.0.0", root.GetProperty("targetAbi").GetString());
     }

@@ -55,7 +55,7 @@ public class ClipImageProvider : IDynamicImageProvider, IHasOrder
     internal Feature Feature => _feature;
 
     /// <inheritdoc />
-    public string Name => "quipclipper";
+    public string Name => Plugin.ProviderKey;
 
     /// <summary>Gets the order: before the embedded image extractor (99) and the screen grabber (100).</summary>
     public int Order => 0;

@@ -21,6 +21,16 @@ public class ClipMetadataProviderTests
     private static ItemInfo InfoFor(string path) => new(new Video { Path = path });
 
     [Fact]
+    public void The_providers_keep_the_name_libraries_store_their_order_by()
+    {
+        // Lowercase on purpose (Plugin.ProviderKey): Jellyfin finds a provider's place in a
+        // library's saved reader and fetcher order case-sensitively. Only the plugin itself is named QuipClipper.
+        Assert.Equal("quipclipper", Provider.Name);
+        Assert.Equal("quipclipper", new ClipFolderMetadataProvider(NullLogger<ClipFolderMetadataProvider>.Instance).Name);
+        Assert.Equal("quipclipper", new ClipImageProvider(Mock.Of<ILibraryManager>(), Mock.Of<IFileSystem>(), NullLogger<ClipImageProvider>.Instance).Name);
+    }
+
+    [Fact]
     public async Task NamesAClipFromItsSidecar()
     {
         using var dir = new TempDir();

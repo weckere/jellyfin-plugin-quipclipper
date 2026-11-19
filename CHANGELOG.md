@@ -9,6 +9,14 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+- **It says QuipClipper.** The plugin's name in the catalog and on the Plugins page, its
+  settings page, its messages and log lines (now starting `QuipClipper:`) and the subtitle
+  search results (*QuipClipper (machine transcript)*) write the product's name the way
+  QuipClipper does. Its metadata, image and subtitle providers keep the lowercase
+  `quipclipper` names in the library settings: libraries store their provider order by
+  those names, case-sensitively, so a rename would push the plugin's readers and fetchers
+  behind Jellyfin's own in every library saved before.
+
 ## [0.4.0.0] - 2026-10-26
 
 ### Hardening and discovery (quipclipper M22, Phase 4)

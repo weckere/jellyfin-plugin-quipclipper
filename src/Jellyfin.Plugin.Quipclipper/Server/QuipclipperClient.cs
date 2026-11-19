@@ -201,11 +201,11 @@ public sealed class QuipclipperClient
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new QuipclipperException($"quipclipper didn't answer within {_timeout.TotalSeconds:0} s");
+            throw new QuipclipperException($"QuipClipper didn't answer within {_timeout.TotalSeconds:0} s");
         }
         catch (HttpRequestException ex)
         {
-            throw new QuipclipperException("quipclipper is unreachable: " + ex.Message, ex);
+            throw new QuipclipperException("QuipClipper is unreachable: " + ex.Message, ex);
         }
     }
 
@@ -219,7 +219,7 @@ public sealed class QuipclipperClient
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var detail = Detail(body);
         throw new QuipclipperException(
-            $"quipclipper answered {(int)response.StatusCode} {doing}" + (detail is null ? string.Empty : ": " + detail),
+            $"QuipClipper answered {(int)response.StatusCode} {doing}" + (detail is null ? string.Empty : ": " + detail),
             (int)response.StatusCode);
     }
 
@@ -228,11 +228,11 @@ public sealed class QuipclipperClient
         try
         {
             return await response.Content.ReadFromJsonAsync<T>(Json, cancellationToken).ConfigureAwait(false)
-                   ?? throw new QuipclipperException("quipclipper sent an empty reply");
+                   ?? throw new QuipclipperException("QuipClipper sent an empty reply");
         }
         catch (JsonException ex)
         {
-            throw new QuipclipperException("quipclipper sent a reply that isn't what the plugin expects", ex);
+            throw new QuipclipperException("QuipClipper sent a reply that isn't what the plugin expects", ex);
         }
     }
 

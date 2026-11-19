@@ -35,16 +35,25 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <summary>Gets the running plugin (set when Jellyfin loads it), for its configuration.</summary>
     public static Plugin? Instance { get; private set; }
 
+    /// <summary>
+    /// The name of the plugin's metadata, image and subtitle providers. It stays lowercase, unlike
+    /// <see cref="Name"/>: a library's saved options keep the order of its metadata readers, image
+    /// fetchers and subtitle downloaders as lists of these names, and Jellyfin matches a provider
+    /// to its place there case-sensitively. Renamed, the providers would drop to the end of every
+    /// library saved before, behind Jellyfin's own image extractors and NFO reader.
+    /// </summary>
+    internal const string ProviderKey = "quipclipper";
+
     /// <inheritdoc />
-    public override string Name => "quipclipper";
+    public override string Name => "QuipClipper";
 
     /// <inheritdoc />
     public override Guid Id => PluginId;
 
     /// <inheritdoc />
     public override string Description =>
-        "Shows quipclipper's clips by their line, with the source's artwork, overview and show tag; " +
-        "tells quipclipper when Jellyfin brings in a subtitle, so it is searchable at once.";
+        "Shows QuipClipper's clips by their line, with the source's artwork, overview and show tag; " +
+        "tells QuipClipper when Jellyfin brings in a subtitle, so it is searchable at once.";
 
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages() =>

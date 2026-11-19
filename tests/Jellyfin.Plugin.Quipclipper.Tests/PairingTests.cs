@@ -166,7 +166,7 @@ public class PairingTests
         _qc.Approve("req0");
         var state = await _pairing.PollAsync(default);
         Assert.Equal("too_old", state.Status);
-        Assert.Contains("Update quipclipper", state.Detail, StringComparison.Ordinal);
+        Assert.Contains("Update QuipClipper", state.Detail, StringComparison.Ordinal);
         Assert.True(_qc.Revoked);                         // DELETE /api/clients/self with it
         Assert.False(_config.Current.Connected);          // and never kept
         Assert.Equal(0, _config.Saves);

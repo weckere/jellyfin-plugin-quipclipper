@@ -2,35 +2,35 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>quipclipper</title>
+    <title>QuipClipper</title>
 </head>
 <body>
     <div id="QuipclipperConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
         <div data-role="content">
             <div class="content-primary">
-                <h2 class="sectionTitle">quipclipper</h2>
-                <p>Clip metadata needs nothing set here: a Home Videos library on quipclipper's clips folder shows each clip by its line.</p>
+                <h2 class="sectionTitle">QuipClipper</h2>
+                <p>Clip metadata needs nothing set here: a Home Videos library on QuipClipper's clips folder shows each clip by its line.</p>
 
                 <div id="QcFeatures" class="verticalSection" role="alert" hidden>
                     <p><strong>Off until Jellyfin restarts:</strong> <span id="QcFeaturesOff" style="overflow-wrap:anywhere"></span>. This Jellyfin doesn't match what the plugin was built against; update the plugin. Jellyfin's log has the details.</p>
                 </div>
 
                 <h3 class="sectionTitle">Re-index changed subtitles, and machine transcripts</h3>
-                <p>When Jellyfin downloads a subtitle, or notices one dropped into a library, this server tells quipclipper, which re-indexes that file so its lines are searchable within a minute. Jellyfin's subtitle search also offers quipclipper's machine transcripts. Connect pairs with quipclipper: allow the code shown here in quipclipper's banner. Its key can only queue re-indexes and read transcripts.</p>
+                <p>When Jellyfin downloads a subtitle, or notices one dropped into a library, this server tells QuipClipper, which re-indexes that file so its lines are searchable within a minute. Jellyfin's subtitle search also offers QuipClipper's machine transcripts. Connect pairs with QuipClipper: allow the code shown here in QuipClipper's banner. Its key can only queue re-indexes and read transcripts.</p>
 
                 <div id="QcDisconnected">
                     <div class="inputContainer">
-                        <input is="emby-input" type="url" id="QcServerUrl" label="quipclipper's URL, as this server reaches it" placeholder="http://quipclipper:8080" autocomplete="url" />
+                        <input is="emby-input" type="url" id="QcServerUrl" label="QuipClipper's URL, as this server reaches it" placeholder="http://quipclipper:8080" autocomplete="url" />
                         <div class="fieldDescription">Jellyfin calls it, not your browser: from a container, its address on Jellyfin's network.</div>
                     </div>
                     <button is="emby-button" type="button" id="QcConnect" class="raised button-submit block"><span>Connect</span></button>
                     <div id="QcPairing" hidden>
-                        <p>Allow <strong>Jellyfin</strong> in quipclipper's banner if it shows the code <strong id="QcCode" style="font-size:1.4em;letter-spacing:.15em"></strong>.</p>
+                        <p>Allow <strong>Jellyfin</strong> in QuipClipper's banner if it shows the code <strong id="QcCode" style="font-size:1.4em;letter-spacing:.15em"></strong>.</p>
                         <button is="emby-button" type="button" id="QcCancel" class="raised block"><span>Cancel</span></button>
                     </div>
                     <div class="verticalSection" style="margin-top:2em">
                         <h3 class="sectionTitle">Don't know its URL?</h3>
-                        <p class="fieldDescription">This lists quipclipper servers that advertise themselves on this server's network (quipclipper's <code>QC_ADVERTISE=1</code>). A Jellyfin in a container finds them only when it uses the host's network.</p>
+                        <p class="fieldDescription">This lists QuipClipper servers that advertise themselves on this server's network (QuipClipper's <code>QC_ADVERTISE=1</code>). A Jellyfin in a container finds them only when it uses the host's network.</p>
                         <button is="emby-button" type="button" id="QcFind" class="raised block"><span>Find on this network</span></button>
                         <ul id="QcFound" class="paperList" style="list-style:none;margin:.5em 0;padding:.5em 1em" hidden></ul>
                     </div>
@@ -41,7 +41,7 @@
                     <div class="checkboxContainer">
                         <label>
                             <input is="emby-checkbox" type="checkbox" id="QcWatch" />
-                            <span>Send changed subtitles to quipclipper</span>
+                            <span>Send changed subtitles to QuipClipper</span>
                         </label>
                     </div>
                     <fieldset class="verticalSection" style="border:0;margin:0;padding:0">
@@ -113,7 +113,7 @@
                         stopPolling();
                         $('QcPairing').hidden = true;
                         if (status === 'idle') return;
-                        say(field(s, 'detail') || (status === 'connected' ? 'Connected.' : status === 'denied' ? 'quipclipper turned it down.' : 'The request expired; connect again.'));
+                        say(field(s, 'detail') || (status === 'connected' ? 'Connected.' : status === 'denied' ? 'QuipClipper turned it down.' : 'The request expired; connect again.'));
                         load();
                     }, function (err) {
                         if (run !== pollRun) return;
@@ -196,7 +196,7 @@
                     say('Looking on this server\'s network…');
                     api('GET', 'Discover').then(function (r) {
                         showFound(r.servers || []);
-                        say(r.problem || ((r.servers || []).length ? '' : 'No quipclipper answered on this server\'s network. Type its URL instead.'));
+                        say(r.problem || ((r.servers || []).length ? '' : 'No QuipClipper answered on this server\'s network. Type its URL instead.'));
                     }, failed).then(function () { button.disabled = false; });
                 });
                 $('QcConnect').addEventListener('click', function () {
