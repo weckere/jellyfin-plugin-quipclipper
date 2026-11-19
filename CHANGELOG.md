@@ -9,6 +9,8 @@ Every commit on `dev` that changes behaviour adds a line under **Unreleased**;
 
 ## [Unreleased]
 
+## [0.4.1.0] - 2026-11-19
+
 - **It says QuipClipper.** The plugin's name in the catalog and on the Plugins page, its
   settings page, its messages and log lines (now starting `QuipClipper:`) and the subtitle
   search results (*QuipClipper (machine transcript)*) write the product's name the way
